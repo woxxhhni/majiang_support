@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>川麻辅助 V1</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>川麻辅助 V1</h1>
+          <p>点击牌面加入手牌，也可以拖拽调整顺序。确认后结果会直接显示在右侧。</p>
+        </div>
+        <div class="status-strip" aria-live="polite">
+          <span id="handCount">0 / 14</span>
+          <span id="stateText">等待输入</span>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <div class="input-panel">
+          <section class="controls" aria-label="规则设置">
+            <label>
+              定缺
+              <select id="missingSuit">
+                <option value="">未选择</option>
+                <option value="m">万</option>
+                <option value="p">筒</option>
+                <option value="s">条</option>
+              </select>
+            </label>
+            <button id="sortHand" type="button">一键排序</button>
+            <button id="clearHand" type="button">清空</button>
+            <button id="analyze" class="primary" type="button">确认分析</button>
+          </section>
+
+          <section class="hand-zone" aria-label="我的手牌">
+            <div class="section-title">
+              <h2>我的手牌</h2>
+              <span>需要 14 张</span>
+            </div>
+            <div id="hand" class="hand" aria-label="已输入手牌"></div>
+            <div class="drop-hint">把牌拖到这里；点击手牌可移除</div>
+          </section>
+
+          <section class="tile-picker" aria-label="牌池">
+            <div class="section-title">
+              <h2>牌池</h2>
+              <span>每种最多 4 张</span>
+            </div>
+            <div id="tilePool" class="tile-pool"></div>
+          </section>
+        </div>
+
+        <aside class="result-panel" aria-label="分析结果">
+          <div class="section-title">
+            <h2>输出结果</h2>
+            <span id="resultStamp">未分析</span>
+          </div>
+          <div id="result" class="result empty">
+            输入 14 张手牌并点击确认分析，推荐结果会显示在这里。
+          </div>
+        </aside>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
+
