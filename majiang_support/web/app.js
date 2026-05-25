@@ -528,6 +528,18 @@ function formatDingQueText(payload) {
   return lines.join("\n");
 }
 
+function formatWinText(payload) {
+  const lines = [
+    "已经胡了",
+    payload.message,
+    `手牌：${payload.hand.join(" ")}`,
+  ];
+  if (payload.melds && payload.melds.length) {
+    lines.push(`固定面子：${payload.melds.map((meld) => `${meld.label}(${meld.kind})`).join("、")}`);
+  }
+  return lines.join("\n");
+}
+
 function formatActionText(payload) {
   const best = payload.best;
   const lines = [
@@ -746,6 +758,11 @@ document.querySelector("#analyze").addEventListener("click", async () => {
     return;
   }
 
+  if (payload.won) {
+    showWinResult(payload);
+    return;
+  }
+
   showResult(payload);
 });
 
@@ -863,6 +880,20 @@ function showResult(payload) {
     <div class="candidate-list">
       ${candidates}
     </div>
+  `;
+}
+
+function showWinResult(payload) {
+  resultStamp.textContent = "已经胡了";
+  lastResultText = formatWinText(payload);
+  result.className = "result";
+  result.innerHTML = `
+    <div class="best">
+      当前牌型
+      <strong>${payload.label}</strong>
+    </div>
+    <div class="notice">${payload.message}</div>
+    <div class="text-output">${escapeHtml(payload.hand.join(" "))}</div>
   `;
 }
 

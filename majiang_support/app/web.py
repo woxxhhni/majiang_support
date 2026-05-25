@@ -11,6 +11,7 @@ from urllib.parse import unquote
 from majiang_support.core.hand import Hand
 from majiang_support.core.meld import Meld
 from majiang_support.core.tile import Tile, parse_suit
+from majiang_support.core.win import can_win
 from majiang_support.strategy.action import recommend_action_after_discard, recommend_action_after_draw
 from majiang_support.strategy.dingque import recommend_dingque
 from majiang_support.strategy.discard import recommend_discard
@@ -52,6 +53,9 @@ class MahjongWebHandler(SimpleHTTPRequestHandler):
             open_melds = _parse_open_melds(payload.get("melds", []))
             visible_counts = _parse_visible_counts(payload.get("discards", []))
             hand = Hand.parse(hand_text)
+            if hand.size + 3 * len(open_melds) == 14 and can_win(hand, missing_suit, open_melds):
+                self._send_json(_winning_hand_to_dict(hand, open_melds))
+                return
             recommendation = recommend_discard(
                 hand,
                 missing_suit,
@@ -142,6 +146,23 @@ def _recommendation_to_dict(recommendation: Any) -> dict[str, Any]:
         "best": _candidate_to_dict(recommendation.best),
         "missing_suit_active": recommendation.missing_suit_active,
         "candidates": [_candidate_to_dict(candidate) for candidate in recommendation.candidates],
+    }
+
+
+def _winning_hand_to_dict(hand: Hand, open_melds: tuple[Meld, ...]) -> dict[str, Any]:
+    return {
+        "won": True,
+        "label": "已经胡了",
+        "hand": hand.labels(),
+        "melds": [_meld_to_dict(meld) for meld in open_melds],
+        "message": "这副牌已经是胡牌形，不需要再推荐打哪张。",
+    }
+
+
+def _meld_to_dict(meld: Meld) -> dict[str, Any]:
+    return {
+        "kind": meld.kind,
+        "label": meld.tile.label,
     }
 
 
