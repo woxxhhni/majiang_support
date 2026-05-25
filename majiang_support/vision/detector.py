@@ -6,12 +6,14 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageChops, ImageOps
+from PIL import Image, ImageOps
 import numpy as np
 
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "assets" / "templates" / "hand"
 TEMPLATE_SIZE = (64, 88)
+SYMBOL_SIZE = (96, 120)
+RANK_SIZE = (96, 56)
 
 
 @dataclass(frozen=True)
@@ -19,6 +21,14 @@ class RegionDetection:
     name: str
     tiles: tuple[str, ...]
     box: tuple[int, int, int, int]
+
+
+@dataclass(frozen=True)
+class TileFeature:
+    symbol_gray: np.ndarray
+    symbol_mask: np.ndarray
+    rank_mask: np.ndarray
+    suit_hint: str | None
 
 
 def detect_screenshot_regions(data_url: str, hand_captures: list[str] | None = None) -> dict[str, Any]:
@@ -84,7 +94,7 @@ def _load_hand_templates(raw: bool = False) -> dict[str, Image.Image]:
     templates: dict[str, Image.Image] = {}
     for path in sorted(TEMPLATE_DIR.glob("*.png")):
         image = Image.open(path).convert("RGB")
-        templates[path.stem] = _prepare_scan_image(image) if raw else _prepare_match_image(image)
+        templates[path.stem] = _prepare_scan_image(image) if raw else image
     if not templates:
         raise RuntimeError(f"手牌模板目录为空: {TEMPLATE_DIR}")
     return templates
@@ -134,29 +144,201 @@ def _overlaps(left: dict[str, Any], right: dict[str, Any]) -> bool:
 
 
 def _match_hand_tile(image: Image.Image, templates: dict[str, Image.Image]) -> tuple[str, float]:
-    prepared = _prepare_match_image(image.convert("RGB"))
+    prepared = _extract_tile_feature(image.convert("RGB"))
     best_name = ""
     best_score = -1.0
-    for name, template in templates.items():
-        score = _similarity(prepared, template)
+    candidates = templates
+    if prepared.suit_hint:
+        same_suit = {name: template for name, template in templates.items() if name.endswith(prepared.suit_hint)}
+        if same_suit:
+            candidates = same_suit
+    for name, template in candidates.items():
+        score = _tile_similarity(prepared, _extract_tile_feature(template), name)
         if score > best_score:
             best_name = name
             best_score = score
     return best_name, best_score
 
 
-def _prepare_match_image(image: Image.Image) -> Image.Image:
+def _extract_tile_feature(image: Image.Image) -> TileFeature:
+    foreground = _foreground_mask(image)
+    symbol = _crop_by_mask(image, foreground)
+    symbol_gray = _prepare_feature_gray(symbol, SYMBOL_SIZE)
+    symbol_mask = _prepare_feature_mask(_foreground_mask(symbol), SYMBOL_SIZE)
+
+    rank_source = _rank_area(image)
+    black = _black_mask(rank_source)
+    rank = _crop_by_mask(rank_source, black)
+    rank_mask = _prepare_feature_mask(_black_mask(rank), RANK_SIZE)
+    return TileFeature(
+        symbol_gray=symbol_gray,
+        symbol_mask=symbol_mask,
+        rank_mask=rank_mask,
+        suit_hint=_guess_suit(image),
+    )
+
+
+def _tile_similarity(left: TileFeature, right: TileFeature, template_name: str) -> float:
+    symbol_score = 0.65 * _array_similarity(left.symbol_gray, right.symbol_gray) + 0.35 * _mask_iou(
+        left.symbol_mask, right.symbol_mask
+    )
+    if template_name.endswith("m"):
+        rank_score = _projection_score(left.rank_mask, right.rank_mask)
+        return 0.78 * rank_score + 0.22 * symbol_score
+    return symbol_score
+
+
+def _prepare_feature_gray(image: Image.Image, size: tuple[int, int]) -> np.ndarray:
     gray = ImageOps.grayscale(image)
     gray = ImageOps.autocontrast(gray)
-    return gray.resize(TEMPLATE_SIZE, Image.Resampling.LANCZOS)
+    return np.asarray(gray.resize(size, Image.Resampling.LANCZOS), dtype=np.float32) / 255.0
 
 
-def _similarity(left: Image.Image, right: Image.Image) -> float:
-    diff = ImageChops.difference(left, right)
-    histogram = diff.histogram()
-    squared_error = sum(count * (value**2) for value, count in enumerate(histogram))
-    max_error = left.size[0] * left.size[1] * (255**2)
-    return 1.0 - squared_error / max_error
+def _prepare_feature_mask(mask: np.ndarray, size: tuple[int, int]) -> np.ndarray:
+    if mask.size == 0:
+        return np.zeros((size[1], size[0]), dtype=bool)
+    image = Image.fromarray((mask.astype(np.uint8) * 255), mode="L")
+    resized = image.resize(size, Image.Resampling.NEAREST)
+    return np.asarray(resized) > 0
+
+
+def _foreground_mask(image: Image.Image) -> np.ndarray:
+    array = np.asarray(image.convert("RGB"), dtype=np.int16)
+    channel_min = array.min(axis=2)
+    channel_max = array.max(axis=2)
+    saturation = channel_max - channel_min
+    return (channel_min < 205) | (saturation > 28)
+
+
+def _black_mask(image: Image.Image) -> np.ndarray:
+    array = np.asarray(image.convert("RGB"), dtype=np.int16)
+    red, green, blue = array[:, :, 0], array[:, :, 1], array[:, :, 2]
+    return (red < 120) & (green < 120) & (blue < 120)
+
+
+def _rank_area(image: Image.Image) -> Image.Image:
+    foreground = _foreground_mask(image)
+    tile = _crop_by_mask(image, foreground, padding=8)
+    left = round(tile.width * 0.08)
+    top = round(tile.height * 0.02)
+    right = round(tile.width * 0.92)
+    bottom = round(tile.height * 0.45)
+    return tile.crop((left, top, right, bottom))
+
+
+def _guess_suit(image: Image.Image) -> str | None:
+    array = np.asarray(image.convert("RGB"), dtype=np.int16)
+    foreground = _foreground_mask(image)
+    if foreground.sum() == 0:
+        return None
+    red, green, blue = array[:, :, 0], array[:, :, 1], array[:, :, 2]
+    red_ratio = (((red > 120) & (green < 125) & (blue < 125) & foreground).sum() / foreground.sum())
+    green_ratio = (((green > red + 24) & (green > blue + 18) & foreground).sum() / foreground.sum())
+    black_ratio = (_black_mask(image).sum() / foreground.sum())
+    if red_ratio > 0.12 and green_ratio < 0.04 and black_ratio > 0.10:
+        return "m"
+    if green_ratio > 0.28 and red_ratio < 0.07:
+        return "s"
+    if green_ratio > 0.06 and red_ratio > 0.04:
+        return "p"
+    return None
+
+
+def _crop_by_mask(image: Image.Image, mask: np.ndarray, padding: int = 5) -> Image.Image:
+    ys, xs = np.where(mask)
+    if len(xs) == 0 or len(ys) == 0:
+        return image
+    left = max(int(xs.min()) - padding, 0)
+    top = max(int(ys.min()) - padding, 0)
+    right = min(int(xs.max()) + padding + 1, image.width)
+    bottom = min(int(ys.max()) + padding + 1, image.height)
+    return image.crop((left, top, right, bottom))
+
+
+def _array_similarity(left: np.ndarray, right: np.ndarray) -> float:
+    return 1.0 - float(np.mean((left - right) ** 2))
+
+
+def _mask_iou(left: np.ndarray, right: np.ndarray) -> float:
+    union = np.logical_or(left, right).sum()
+    if union == 0:
+        return 0.0
+    return float(np.logical_and(left, right).sum() / union)
+
+
+def _projection_score(left: np.ndarray, right: np.ndarray) -> float:
+    row_score = _best_shifted_correlation(left.sum(axis=1), right.sum(axis=1), max_shift=24)
+    column_score = _best_shifted_correlation(left.sum(axis=0), right.sum(axis=0), max_shift=18)
+    segment_penalty = 0.08 * abs(_segment_count(left.sum(axis=1)) - _segment_count(right.sum(axis=1)))
+    component_penalty = 0.16 * abs(_component_count(left) - _component_count(right))
+    return max(0.0, (0.65 * row_score + 0.35 * column_score) - segment_penalty - component_penalty)
+
+
+def _best_shifted_correlation(left: np.ndarray, right: np.ndarray, max_shift: int) -> float:
+    left = left.astype(np.float32)
+    right = right.astype(np.float32)
+    best = 0.0
+    for shift in range(-max_shift, max_shift + 1):
+        if shift < 0:
+            left_window = left[-shift:]
+            right_window = right[: len(left_window)]
+        elif shift > 0:
+            left_window = left[:-shift]
+            right_window = right[shift:]
+        else:
+            left_window = left
+            right_window = right
+        if len(left_window) < 8 or left_window.std() == 0 or right_window.std() == 0:
+            continue
+        score = float(np.corrcoef(left_window, right_window)[0, 1])
+        best = max(best, score)
+    return best
+
+
+def _segment_count(projection: np.ndarray) -> int:
+    if projection.max() <= 0:
+        return 0
+    active = projection > projection.max() * 0.25
+    count = 0
+    in_segment = False
+    for value in active:
+        if value and not in_segment:
+            count += 1
+            in_segment = True
+        elif not value:
+            in_segment = False
+    return count
+
+
+def _component_count(mask: np.ndarray, min_pixels: int = 100) -> int:
+    visited = np.zeros(mask.shape, dtype=bool)
+    height, width = mask.shape
+    count = 0
+    for y in range(height):
+        for x in range(width):
+            if not mask[y, x] or visited[y, x]:
+                continue
+            pixels = 0
+            stack = [(y, x)]
+            visited[y, x] = True
+            while stack:
+                current_y, current_x = stack.pop()
+                pixels += 1
+                for dy in (-1, 0, 1):
+                    for dx in (-1, 0, 1):
+                        next_y = current_y + dy
+                        next_x = current_x + dx
+                        if (
+                            0 <= next_y < height
+                            and 0 <= next_x < width
+                            and mask[next_y, next_x]
+                            and not visited[next_y, next_x]
+                        ):
+                            visited[next_y, next_x] = True
+                            stack.append((next_y, next_x))
+            if pixels >= min_pixels:
+                count += 1
+    return count
 
 
 def _normalize_detector_tile(tile: str) -> str:

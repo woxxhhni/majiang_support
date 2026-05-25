@@ -15,3 +15,13 @@ def test_hand_template_matches_itself():
 
     assert name == "1m"
     assert score > 0.99
+
+
+def test_hand_template_matches_resized_two_wan():
+    templates = _load_hand_templates()
+    resized = templates["2m"].resize((224, 313))
+
+    name, score = _match_hand_tile(resized, templates)
+
+    assert name == "2m"
+    assert score > 0.75
