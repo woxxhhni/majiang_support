@@ -118,7 +118,7 @@ function createTile(tile, options = {}) {
     ${counter}
     <span><span class="rank">${tile[0]}</span><br><span class="suit">${tileLabel(tile).slice(1)}</span></span>
   `;
-  const countLabel = options.countText ? `，已选 ${options.countText}` : "";
+  const countLabel = options.countAria ? `，${options.countAria}` : "";
   button.setAttribute("aria-label", `${tileLabel(tile)}${countLabel}`);
   if (options.disabled) {
     button.classList.add("used-up");
@@ -135,9 +135,11 @@ function renderPool() {
     for (let rank = 1; rank <= 9; rank += 1) {
       const tile = `${rank}${suit.id}`;
       const selectedCount = counts[tile] || 0;
+      const remainingCount = Math.max(0, 4 - selectedCount);
       const button = createTile(tile, {
         disabled: selectedCount >= 4,
-        countText: `${selectedCount}/4`,
+        countText: `余${remainingCount}`,
+        countAria: `剩余 ${remainingCount} 张`,
       });
       button.addEventListener("click", () => addTile(tile));
       button.addEventListener("dragstart", (event) => {
