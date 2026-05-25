@@ -195,6 +195,7 @@ def _best_waiting_route(
         remaining_counts_for_waiting(hand, visible_counts=visible_counts, melds=open_melds),
         forbidden_suit=forbidden_suit,
         open_melds=open_melds,
+        probability_total=sum(remaining_counts_for_waiting(hand, melds=open_melds)),
     )
     return routes[0]
 

@@ -442,6 +442,13 @@ function fallbackCopyText(text) {
   textarea.remove();
 }
 
+function formatEffectiveTiles(labels) {
+  if (!labels || labels.length === 0) {
+    return "无";
+  }
+  return labels.join("、");
+}
+
 function insertDraggedTile(payload, targetIndex = hand.length) {
   if (payload.source === "pool") {
     if (playerTileTotal() >= 14 || (visibleTileCounts()[payload.tile] || 0) >= 4) {
@@ -668,6 +675,7 @@ function showResult(payload) {
             <span>路线 ${candidate.best_route.label}</span>
             <span>EV ${candidate.ev.toFixed(3)}</span>
           </div>
+          <div class="effective-line">有效牌：${formatEffectiveTiles(candidate.effective_tiles)}</div>
         </div>
       `,
     )
@@ -689,6 +697,7 @@ function showResult(payload) {
         <span>概率 ${payload.best.best_route.probability.toFixed(3)}</span>
         <span>进张 ${payload.best.best_route.effective_count}</span>
       </div>
+      <div class="effective-line">有效牌：${formatEffectiveTiles(payload.best.best_route.effective_tiles)}</div>
     </div>
     <ol class="reasons">
       ${payload.best.reasons.map((reason) => `<li>${reason}</li>`).join("")}
@@ -707,6 +716,7 @@ function showResult(payload) {
                 <span>番数 ${route.fan}</span>
                 <span>进张 ${route.effective_count}</span>
               </div>
+              <div class="effective-line">有效牌：${formatEffectiveTiles(route.effective_tiles)}</div>
             </div>
           `,
         )

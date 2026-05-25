@@ -83,3 +83,17 @@ def test_visible_discards_reduce_effective_tiles():
     discard_9p = next(candidate for candidate in recommendation.candidates if str(candidate.tile) == "9p")
 
     assert Tile.parse("1m").id not in discard_9p.effective.tile_ids
+
+
+def test_visible_discards_do_not_inflate_route_ev():
+    hand = Hand.parse("2p 2p 4p 5p 6p 6p 6p 7p 9p 9p 1s 1s 8s 8s")
+    visible = [0] * 27
+    for tile in ("8s", "8s", "1s", "1s", "6p"):
+        visible[Tile.parse(tile).id] += 1
+
+    base = recommend_discard(hand, None)
+    with_visible = recommend_discard(hand, None, visible_counts=tuple(visible))
+
+    for candidate in with_visible.candidates:
+        base_candidate = next(item for item in base.candidates if item.tile_id == candidate.tile_id)
+        assert candidate.ev <= base_candidate.ev

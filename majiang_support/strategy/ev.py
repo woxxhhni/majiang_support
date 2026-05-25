@@ -47,9 +47,10 @@ def evaluate_routes(
     forbidden_suit: str | None = None,
     stage: str = "middle",
     open_melds: tuple[Meld, ...] = (),
+    probability_total: int | None = None,
 ) -> tuple[RouteEvaluation, ...]:
     factor = STAGE_FACTOR.get(stage, STAGE_FACTOR["middle"])
-    unknown_total = sum(remaining_counts)
+    unknown_total = probability_total if probability_total is not None else sum(remaining_counts)
     open_count = len(open_melds)
     routes: list[RouteEvaluation] = [
         _build_route("平胡", hand, remaining_counts, lambda h: calculate_standard_shanten(h, open_count), FAN_TABLE["平胡"], factor, unknown_total, forbidden_suit),

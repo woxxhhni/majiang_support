@@ -85,7 +85,14 @@ def _score_discard(
 ) -> DiscardCandidate:
     after = hand.remove(tile_id)
     remaining_counts = remaining_counts_after_discard(hand, tile_id, visible_counts=visible_counts, melds=open_melds)
-    routes = evaluate_routes(after, remaining_counts, forbidden_suit=forbidden_suit, open_melds=open_melds)
+    probability_total = sum(remaining_counts_after_discard(hand, tile_id, melds=open_melds))
+    routes = evaluate_routes(
+        after,
+        remaining_counts,
+        forbidden_suit=forbidden_suit,
+        open_melds=open_melds,
+        probability_total=probability_total,
+    )
     best_route = routes[0]
     shanten = best_route.shanten
     standard_shanten = calculate_standard_shanten(after, open_meld_count=len(open_melds))
