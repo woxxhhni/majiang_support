@@ -9,7 +9,8 @@ from typing import Any
 from urllib.parse import unquote
 
 from majiang_support.core.hand import Hand
-from majiang_support.core.tile import parse_suit
+from majiang_support.core.tile import Tile, parse_suit
+from majiang_support.strategy.action import recommend_action_after_discard, recommend_action_after_draw
 from majiang_support.strategy.dingque import recommend_dingque
 from majiang_support.strategy.discard import recommend_discard
 from majiang_support.vision.detector import detect_screenshot_regions
@@ -36,6 +37,9 @@ class MahjongWebHandler(SimpleHTTPRequestHandler):
             return
         if self.path == "/api/detect-screenshot":
             self._handle_detect_screenshot()
+            return
+        if self.path == "/api/recommend-action":
+            self._handle_recommend_action()
             return
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
@@ -67,6 +71,24 @@ class MahjongWebHandler(SimpleHTTPRequestHandler):
             if not image_data:
                 raise ValueError("缺少截图数据")
             self._send_json(detect_screenshot_regions(str(image_data)))
+        except Exception as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
+    def _handle_recommend_action(self) -> None:
+        try:
+            payload = self._read_json_body()
+            hand_text = " ".join(str(tile) for tile in payload.get("hand", []))
+            hand = Hand.parse(hand_text)
+            missing_suit = parse_suit(payload.get("missing"))
+            scene = payload.get("scene")
+            if scene == "after_discard":
+                incoming = Tile.parse(str(payload.get("incoming")))
+                recommendation = recommend_action_after_discard(hand, incoming.id, missing_suit)
+            elif scene == "after_draw":
+                recommendation = recommend_action_after_draw(hand, missing_suit)
+            else:
+                raise ValueError("未知动作场景")
+            self._send_json(_action_recommendation_to_dict(recommendation))
         except Exception as exc:
             self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
 
@@ -149,6 +171,26 @@ def _dingque_candidate_to_dict(candidate: Any) -> dict[str, Any]:
         "score": candidate.score,
         "tile_count": candidate.tile_count,
         "structure_value": candidate.structure_value,
+        "reasons": list(candidate.reasons),
+    }
+
+
+def _action_recommendation_to_dict(recommendation: Any) -> dict[str, Any]:
+    return {
+        "best": _action_candidate_to_dict(recommendation.best),
+        "candidates": [_action_candidate_to_dict(candidate) for candidate in recommendation.candidates],
+    }
+
+
+def _action_candidate_to_dict(candidate: Any) -> dict[str, Any]:
+    return {
+        "action": candidate.action,
+        "label": candidate.label,
+        "ev_before": round(candidate.ev_before, 6),
+        "ev_after": round(candidate.ev_after, 6),
+        "delta": round(candidate.delta, 6),
+        "route": _route_to_dict(candidate.route),
+        "discard": _recommendation_to_dict(candidate.discard) if candidate.discard else None,
         "reasons": list(candidate.reasons),
     }
 

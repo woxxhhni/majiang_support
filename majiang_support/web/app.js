@@ -20,6 +20,20 @@ let screenshotDataUrl = "";
 let screenshotHandTiles = [];
 let screenshotDiscardTiles = [];
 
+function populateIncomingTileSelect() {
+  const select = document.querySelector("#incomingTile");
+  select.innerHTML = "";
+  for (const suit of suits) {
+    for (let rank = 1; rank <= 9; rank += 1) {
+      const tile = `${rank}${suit.id}`;
+      const option = document.createElement("option");
+      option.value = tile;
+      option.textContent = tileLabel(tile);
+      select.append(option);
+    }
+  }
+}
+
 function tileLabel(tile) {
   return `${tile[0]}${suits.find((suit) => suit.id === tile[1]).label}`;
 }
@@ -268,6 +282,44 @@ document.querySelector("#analyze").addEventListener("click", async () => {
   showResult(payload);
 });
 
+document.querySelector("#analyzeAction").addEventListener("click", async () => {
+  const scene = document.querySelector("#actionScene").value;
+  if (scene === "after_draw" && hand.length !== 14) {
+    result.className = "result";
+    result.innerHTML = `<div class="error">我摸牌后需要 14 张手牌。</div>`;
+    resultStamp.textContent = "未完成";
+    return;
+  }
+  if (scene === "after_discard" && hand.length !== 13) {
+    result.className = "result";
+    result.innerHTML = `<div class="error">别人打牌后通常需要输入你当前 13 张手牌。</div>`;
+    resultStamp.textContent = "未完成";
+    return;
+  }
+
+  result.className = "result";
+  result.innerHTML = "正在分析碰杠...";
+  const response = await fetch("/api/recommend-action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      hand,
+      missing: document.querySelector("#missingSuit").value,
+      scene,
+      incoming: document.querySelector("#incomingTile").value,
+    }),
+  });
+  const payload = await response.json();
+
+  if (!response.ok) {
+    result.innerHTML = `<div class="error">${payload.error || "动作分析失败"}</div>`;
+    resultStamp.textContent = "失败";
+    return;
+  }
+
+  showActionResult(payload);
+});
+
 function showResult(payload) {
   resultStamp.textContent = "已输出";
   const notice = payload.missing_suit_active
@@ -363,6 +415,56 @@ function showDingQueResult(payload) {
     <div class="best">
       推荐定缺
       <strong>${payload.best.label}</strong>
+    </div>
+    <ol class="reasons">
+      ${payload.best.reasons.map((reason) => `<li>${reason}</li>`).join("")}
+    </ol>
+    <div class="candidate-list">
+      ${candidates}
+    </div>
+  `;
+}
+
+function showActionResult(payload) {
+  resultStamp.textContent = "已分析动作";
+  const candidates = payload.candidates
+    .map(
+      (candidate) => `
+        <div class="candidate">
+          <div class="candidate-head">
+            <span>${candidate.label}</span>
+            <span>${candidate.delta.toFixed(3)}</span>
+          </div>
+          <div class="metrics">
+            <span>前 ${candidate.ev_before.toFixed(3)}</span>
+            <span>后 ${candidate.ev_after.toFixed(3)}</span>
+            <span>路线 ${candidate.route.label}</span>
+          </div>
+          ${
+            candidate.discard
+              ? `<div class="notice">后续推荐打：${candidate.discard.best.label}</div>`
+              : ""
+          }
+        </div>
+      `,
+    )
+    .join("");
+
+  result.innerHTML = `
+    <div class="best">
+      推荐动作
+      <strong>${payload.best.label}</strong>
+    </div>
+    <div class="candidate">
+      <div class="candidate-head">
+        <span>动作收益差</span>
+        <span>${payload.best.delta.toFixed(3)}</span>
+      </div>
+      <div class="metrics">
+        <span>动作前 ${payload.best.ev_before.toFixed(3)}</span>
+        <span>动作后 ${payload.best.ev_after.toFixed(3)}</span>
+        <span>路线 ${payload.best.route.label}</span>
+      </div>
     </div>
     <ol class="reasons">
       ${payload.best.reasons.map((reason) => `<li>${reason}</li>`).join("")}
@@ -944,4 +1046,5 @@ function dedupeCaptures(captures) {
   return deduped;
 }
 
+populateIncomingTileSelect();
 render();

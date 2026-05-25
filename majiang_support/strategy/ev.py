@@ -5,6 +5,7 @@ from typing import Callable
 
 from majiang_support.core.effective import EffectiveTiles
 from majiang_support.core.hand import Hand, all_suited_tile_ids
+from majiang_support.core.meld import Meld
 from majiang_support.core.shanten import calculate_seven_pairs_shanten, calculate_standard_shanten
 from majiang_support.core.tile import SUIT_LABELS, Tile, tile_label
 
@@ -45,25 +46,28 @@ def evaluate_routes(
     remaining_counts: tuple[int, ...],
     forbidden_suit: str | None = None,
     stage: str = "middle",
+    open_melds: tuple[Meld, ...] = (),
 ) -> tuple[RouteEvaluation, ...]:
     factor = STAGE_FACTOR.get(stage, STAGE_FACTOR["middle"])
     unknown_total = sum(remaining_counts)
+    open_count = len(open_melds)
     routes: list[RouteEvaluation] = [
-        _build_route("平胡", hand, remaining_counts, calculate_standard_shanten, FAN_TABLE["平胡"], factor, unknown_total, forbidden_suit),
-        _build_route("七对", hand, remaining_counts, calculate_seven_pairs_shanten, FAN_TABLE["七对"], factor, unknown_total, forbidden_suit),
-        _build_route("对对胡", hand, remaining_counts, calculate_all_triplets_shanten, FAN_TABLE["对对胡"], factor, unknown_total, forbidden_suit),
+        _build_route("平胡", hand, remaining_counts, lambda h: calculate_standard_shanten(h, open_count), FAN_TABLE["平胡"], factor, unknown_total, forbidden_suit),
+        _build_route("七对", hand, remaining_counts, lambda h: calculate_seven_pairs_shanten(h, open_count), FAN_TABLE["七对"], factor, unknown_total, forbidden_suit),
+        _build_route("对对胡", hand, remaining_counts, lambda h: calculate_all_triplets_shanten(h, open_melds), FAN_TABLE["对对胡"], factor, unknown_total, forbidden_suit),
     ]
 
     for suit in ("m", "p", "s"):
         if forbidden_suit == suit:
             continue
-        routes.append(_evaluate_flush_route(hand, remaining_counts, suit, factor, unknown_total, forbidden_suit))
+        routes.append(_evaluate_flush_route(hand, remaining_counts, suit, factor, unknown_total, forbidden_suit, open_melds))
 
     return tuple(sorted(routes, key=lambda route: (route.ev, -route.shanten, route.effective.remaining_total), reverse=True))
 
 
-def calculate_all_triplets_shanten(hand: Hand) -> int:
-    triplets = sum(1 for count in hand.counts if count >= 3)
+def calculate_all_triplets_shanten(hand: Hand, open_melds: tuple[Meld, ...] = ()) -> int:
+    open_triplets = sum(1 for meld in open_melds if meld.is_triplet_like)
+    triplets = sum(1 for count in hand.counts if count >= 3) + open_triplets
     pairs = sum(1 for count in hand.counts if count >= 2)
 
     best = 8
@@ -72,8 +76,9 @@ def calculate_all_triplets_shanten(hand: Hand) -> int:
             continue
         pair_count = 1 if uses_pair else 0
         taatsu = pairs - pair_count
-        if triplets + taatsu > 4:
-            taatsu = 4 - triplets
+        needed_melds = 4
+        if triplets + taatsu > needed_melds:
+            taatsu = needed_melds - triplets
         best = min(best, 8 - 2 * triplets - taatsu - pair_count)
     return best
 
@@ -108,7 +113,19 @@ def _evaluate_flush_route(
     stage_factor: float,
     unknown_total: int,
     forbidden_suit: str | None,
+    open_melds: tuple[Meld, ...],
 ) -> RouteEvaluation:
+    if any(meld.tile.suit != target_suit for meld in open_melds):
+        return RouteEvaluation(
+            name="清一色",
+            target_suit=target_suit,
+            shanten=99,
+            fan=FAN_TABLE["清一色"],
+            effective=EffectiveTiles((), 0),
+            probability=0.0,
+            ev=0.0,
+        )
+
     off_suit_count = sum(
         count
         for tile_id, count in enumerate(hand.counts)
@@ -116,7 +133,7 @@ def _evaluate_flush_route(
     )
 
     def flush_shanten(next_hand: Hand) -> int:
-        return calculate_standard_shanten(next_hand) + off_suit_count_for(next_hand, target_suit)
+        return calculate_standard_shanten(next_hand, open_meld_count=len(open_melds)) + off_suit_count_for(next_hand, target_suit)
 
     shanten = flush_shanten(hand)
     effective = _route_effective_tiles(

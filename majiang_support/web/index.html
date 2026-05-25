@@ -38,6 +38,21 @@
             <button id="analyze" class="primary" type="button">确认分析</button>
           </section>
 
+          <section class="action-controls" aria-label="动作推荐">
+            <label>
+              当前场景
+              <select id="actionScene">
+                <option value="after_draw">我摸牌后</option>
+                <option value="after_discard">别人打牌后</option>
+              </select>
+            </label>
+            <label>
+              别人打出的牌
+              <select id="incomingTile"></select>
+            </label>
+            <button id="analyzeAction" class="primary" type="button">分析碰杠</button>
+          </section>
+
           <section class="hand-zone" aria-label="我的手牌">
             <div class="section-title">
               <h2>我的手牌</h2>

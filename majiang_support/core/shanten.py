@@ -5,7 +5,7 @@ from functools import lru_cache
 from majiang_support.core.hand import Hand
 
 
-def calculate_standard_shanten(hand: Hand) -> int:
+def calculate_standard_shanten(hand: Hand, open_meld_count: int = 0) -> int:
     """Return standard hand shanten.
 
     A complete 14-tile winning hand returns -1. A ready 13-tile hand returns 0.
@@ -19,18 +19,21 @@ def calculate_standard_shanten(hand: Hand) -> int:
             mutable = list(counts)
             mutable[pair_id] -= 2
             melds, taatsu = _best_blocks(tuple(mutable))
-            best = min(best, _shanten_from_blocks(melds, taatsu, has_pair=True))
+            best = min(best, _shanten_from_blocks(melds, taatsu, has_pair=True, open_meld_count=open_meld_count))
 
     melds, taatsu = _best_blocks(counts)
-    best = min(best, _shanten_from_blocks(melds, taatsu, has_pair=False))
+    best = min(best, _shanten_from_blocks(melds, taatsu, has_pair=False, open_meld_count=open_meld_count))
     return best
 
 
-def calculate_seven_pairs_shanten(hand: Hand) -> int:
+def calculate_seven_pairs_shanten(hand: Hand, open_meld_count: int = 0) -> int:
     """Return seven-pairs shanten.
 
     A complete seven-pairs hand returns -1. A ready 13-tile hand returns 0.
     """
+
+    if open_meld_count > 0:
+        return 99
 
     pairs = sum(1 for count in hand.counts if count >= 2)
     unique_tiles = sum(1 for count in hand.counts if count > 0)
@@ -38,14 +41,18 @@ def calculate_seven_pairs_shanten(hand: Hand) -> int:
     return 6 - pairs + missing_unique
 
 
-def calculate_best_shanten(hand: Hand) -> int:
-    return min(calculate_standard_shanten(hand), calculate_seven_pairs_shanten(hand))
+def calculate_best_shanten(hand: Hand, open_meld_count: int = 0) -> int:
+    return min(
+        calculate_standard_shanten(hand, open_meld_count=open_meld_count),
+        calculate_seven_pairs_shanten(hand, open_meld_count=open_meld_count),
+    )
 
 
-def _shanten_from_blocks(melds: int, taatsu: int, has_pair: bool) -> int:
-    if melds + taatsu > 4:
-        taatsu = 4 - melds
-    return 8 - 2 * melds - taatsu - (1 if has_pair else 0)
+def _shanten_from_blocks(melds: int, taatsu: int, has_pair: bool, open_meld_count: int = 0) -> int:
+    needed_melds = max(0, 4 - open_meld_count)
+    if melds + taatsu > needed_melds:
+        taatsu = needed_melds - melds
+    return 2 * needed_melds - 2 * melds - taatsu - (1 if has_pair else 0)
 
 
 @lru_cache(maxsize=None)

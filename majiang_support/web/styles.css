@@ -93,13 +93,18 @@ h1 {
   box-shadow: var(--shadow);
 }
 
-.controls {
+.controls,
+.action-controls {
   display: flex;
   gap: 10px;
   align-items: end;
   flex-wrap: wrap;
   padding: 16px;
   border-bottom: 1px solid var(--line);
+}
+
+.action-controls {
+  background: #f8faf8;
 }
 
 label {

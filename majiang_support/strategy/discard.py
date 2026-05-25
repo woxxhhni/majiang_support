@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from majiang_support.core.effective import EffectiveTiles
 from majiang_support.core.hand import Hand
+from majiang_support.core.meld import Meld
 from majiang_support.core.remaining import remaining_counts_after_discard
 from majiang_support.core.shanten import (
     calculate_seven_pairs_shanten,
@@ -41,14 +42,18 @@ class Recommendation:
     missing_suit_active: bool
 
 
-def recommend_discard(hand: Hand, missing_suit: str | None = None) -> Recommendation:
+def recommend_discard(
+    hand: Hand,
+    missing_suit: str | None = None,
+    open_melds: tuple[Meld, ...] = (),
+) -> Recommendation:
     if hand.size not in {2, 5, 8, 11, 14}:
         raise ValueError("出牌推荐需要 14 张手牌，或包含副露后的 3n+2 张手牌")
 
     discard_ids = hand.candidate_discards(missing_suit)
     missing_active = bool(missing_suit and hand.has_suit(missing_suit))
     candidates = [
-        _score_discard(hand, tile_id, missing_suit if missing_active else None, missing_active)
+        _score_discard(hand, tile_id, missing_suit if missing_active else None, missing_active, open_melds)
         for tile_id in discard_ids
     ]
     ordered = tuple(
@@ -74,14 +79,15 @@ def _score_discard(
     tile_id: int,
     forbidden_suit: str | None,
     missing_active: bool,
+    open_melds: tuple[Meld, ...],
 ) -> DiscardCandidate:
     after = hand.remove(tile_id)
-    remaining_counts = remaining_counts_after_discard(hand, tile_id)
-    routes = evaluate_routes(after, remaining_counts, forbidden_suit=forbidden_suit)
+    remaining_counts = remaining_counts_after_discard(hand, tile_id, melds=open_melds)
+    routes = evaluate_routes(after, remaining_counts, forbidden_suit=forbidden_suit, open_melds=open_melds)
     best_route = routes[0]
     shanten = best_route.shanten
-    standard_shanten = calculate_standard_shanten(after)
-    seven_pairs_shanten = calculate_seven_pairs_shanten(after)
+    standard_shanten = calculate_standard_shanten(after, open_meld_count=len(open_melds))
+    seven_pairs_shanten = calculate_seven_pairs_shanten(after, open_meld_count=len(open_melds))
     effective = best_route.effective
     structure_score = evaluate_structure(after)
     discard_value = evaluate_discard_value(hand, tile_id)

@@ -1,5 +1,8 @@
 from majiang_support.app.web import _dingque_to_dict, _recommendation_to_dict
+from majiang_support.app.web import _action_recommendation_to_dict
 from majiang_support.core.hand import Hand
+from majiang_support.core.tile import Tile
+from majiang_support.strategy.action import recommend_action_after_discard
 from majiang_support.strategy.dingque import recommend_dingque
 from majiang_support.strategy.discard import recommend_discard
 
@@ -26,3 +29,14 @@ def test_web_dingque_payload_contains_display_fields():
 
     assert payload["best"]["label"] == "万"
     assert payload["candidates"][0]["score"] <= payload["candidates"][-1]["score"]
+
+
+def test_web_action_payload_contains_display_fields():
+    hand = Hand.parse("1m 1m 2m 3m 4m 5m 6m 7m 8m 2p 3p 4p 6s")
+    recommendation = recommend_action_after_discard(hand, Tile.parse("1m").id)
+
+    payload = _action_recommendation_to_dict(recommendation)
+
+    assert payload["best"]["label"]
+    assert payload["candidates"]
+    assert "delta" in payload["best"]
