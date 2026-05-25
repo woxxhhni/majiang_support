@@ -164,12 +164,23 @@ select:hover {
   margin-bottom: 12px;
 }
 
+.section-title > div {
+  display: grid;
+  gap: 4px;
+}
+
 .section-title h2 {
   font-size: 18px;
 }
 
 .section-title span {
   color: var(--muted);
+  font-size: 13px;
+}
+
+.small-button {
+  height: 32px;
+  padding: 0 12px;
   font-size: 13px;
 }
 
@@ -385,6 +396,14 @@ select:hover {
 .notice {
   color: var(--amber);
   font-weight: 700;
+}
+
+.text-output {
+  border: 1px solid var(--line);
+  background: #f9fbf9;
+  padding: 10px;
+  line-height: 1.7;
+  word-break: break-word;
 }
 
 .error {

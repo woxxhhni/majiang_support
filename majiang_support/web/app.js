@@ -43,6 +43,20 @@ function tileLabel(tile) {
   return `${tile[0]}${suits.find((suit) => suit.id === tile[1]).label}`;
 }
 
+function escapeHtml(text) {
+  return text.replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  })[char]);
+}
+
+function handText() {
+  return hand.map(tileLabel).join(" ");
+}
+
 function tileSortValue(tile) {
   const suitValue = { m: 0, p: 1, s: 2 }[tile[1]];
   return suitValue * 10 + Number(tile[0]);
@@ -180,6 +194,46 @@ function sortHand() {
   render();
 }
 
+async function copyHandText() {
+  if (hand.length === 0) {
+    result.className = "result";
+    result.innerHTML = `<div class="error">现在还没有手牌可以复制。</div>`;
+    resultStamp.textContent = "未完成";
+    return;
+  }
+
+  const text = handText();
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      fallbackCopyText(text);
+    }
+  } catch (error) {
+    fallbackCopyText(text);
+  }
+
+  stateText.textContent = "已复制手牌";
+  result.className = "result";
+  result.innerHTML = `
+    <div class="notice">已复制手牌文字：</div>
+    <div class="text-output">${escapeHtml(text)}</div>
+  `;
+  resultStamp.textContent = "已复制";
+}
+
+function fallbackCopyText(text) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.append(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
 function insertDraggedTile(payload, targetIndex = hand.length) {
   if (payload.source === "pool") {
     if (hand.length >= 14 || (tileCounts()[payload.tile] || 0) >= 4) {
@@ -218,6 +272,8 @@ handEl.addEventListener("drop", (event) => {
 });
 
 document.querySelector("#sortHand").addEventListener("click", sortHand);
+
+document.querySelector("#copyHand").addEventListener("click", copyHandText);
 
 document.querySelector("#randomHand").addEventListener("click", generateRandomReadyMissingHand);
 
