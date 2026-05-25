@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageChops, ImageOps
+import numpy as np
 
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "assets" / "templates" / "hand"
@@ -25,12 +26,17 @@ def detect_screenshot_regions(data_url: str, hand_captures: list[str] | None = N
     hand_region = _crop_ratio(image, (0.015, 0.790, 0.940, 0.205))
     discard_region = _crop_ratio(image, (0.245, 0.125, 0.540, 0.610))
 
-    hand_tiles = _detect_hand_tiles_from_captures(hand_captures) if hand_captures else _detect_hand_tiles(hand_region)
+    hand_matches = _scan_hand_region(hand_region)
+    hand_tiles = [match["tile"] for match in hand_matches]
+    if len(hand_tiles) < 8 and hand_captures:
+        hand_tiles = _detect_hand_tiles_from_captures(hand_captures)
+        hand_matches = []
     discard_tiles = _detect_tiles(discard_region)
 
     return {
         "hand": {
             "tiles": hand_tiles,
+            "matches": hand_matches,
             "box": _ratio_box(image, (0.015, 0.790, 0.940, 0.205)),
         },
         "discards": {
@@ -38,6 +44,19 @@ def detect_screenshot_regions(data_url: str, hand_captures: list[str] | None = N
             "box": _ratio_box(image, (0.245, 0.125, 0.540, 0.610)),
         },
     }
+
+
+def _scan_hand_region(image: Image.Image, threshold: float = 0.95) -> list[dict[str, Any]]:
+    templates = _load_hand_templates(raw=True)
+    region = _prepare_scan_image(image)
+    candidates: list[dict[str, Any]] = []
+
+    for tile, template in templates.items():
+        for match in _scan_template(region, template):
+            if match["score"] >= threshold:
+                candidates.append({"tile": tile, **match})
+
+    return _dedupe_template_matches(candidates)
 
 
 def _detect_hand_tiles_from_captures(captures: list[str]) -> list[str]:
@@ -61,13 +80,57 @@ def _detect_tiles(image: Image.Image) -> list[str]:
     return [_normalize_detector_tile(tile) for tile in detect_tiles(image)]
 
 
-def _load_hand_templates() -> dict[str, Image.Image]:
+def _load_hand_templates(raw: bool = False) -> dict[str, Image.Image]:
     templates: dict[str, Image.Image] = {}
     for path in sorted(TEMPLATE_DIR.glob("*.png")):
-        templates[path.stem] = _prepare_match_image(Image.open(path).convert("RGB"))
+        image = Image.open(path).convert("RGB")
+        templates[path.stem] = _prepare_scan_image(image) if raw else _prepare_match_image(image)
     if not templates:
         raise RuntimeError(f"手牌模板目录为空: {TEMPLATE_DIR}")
     return templates
+
+
+def _prepare_scan_image(image: Image.Image) -> Image.Image:
+    gray = ImageOps.grayscale(image)
+    gray = ImageOps.autocontrast(gray)
+    return gray
+
+
+def _scan_template(region: Image.Image, template: Image.Image) -> list[dict[str, Any]]:
+    region_array = np.asarray(region, dtype=np.float32)
+    template_array = np.asarray(template, dtype=np.float32)
+    template_height, template_width = template_array.shape
+    region_height, region_width = region_array.shape
+    if template_height > region_height or template_width > region_width:
+        return []
+
+    matches: list[dict[str, Any]] = []
+    stride = max(2, template_width // 16)
+    for y in range(0, region_height - template_height + 1, stride):
+        for x in range(0, region_width - template_width + 1, stride):
+            patch = region_array[y : y + template_height, x : x + template_width]
+            mse = np.mean((patch - template_array) ** 2)
+            score = 1.0 - float(mse) / (255**2)
+            if score >= 0.82:
+                matches.append({"x": x, "y": y, "width": template_width, "height": template_height, "score": score})
+    return matches
+
+
+def _dedupe_template_matches(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ordered = sorted(candidates, key=lambda item: item["score"], reverse=True)
+    kept: list[dict[str, Any]] = []
+    for candidate in ordered:
+        if any(_overlaps(candidate, item) for item in kept):
+            continue
+        kept.append(candidate)
+    kept.sort(key=lambda item: item["x"])
+    return kept[:14]
+
+
+def _overlaps(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    dx = abs((left["x"] + left["width"] / 2) - (right["x"] + right["width"] / 2))
+    dy = abs((left["y"] + left["height"] / 2) - (right["y"] + right["height"] / 2))
+    return dx < min(left["width"], right["width"]) * 0.55 and dy < min(left["height"], right["height"]) * 0.55
 
 
 def _match_hand_tile(image: Image.Image, templates: dict[str, Image.Image]) -> tuple[str, float]:
