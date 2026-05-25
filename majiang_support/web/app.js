@@ -117,6 +117,37 @@ function addTile(tile) {
   render();
 }
 
+function randomInt(maxExclusive) {
+  return Math.floor(Math.random() * maxExclusive);
+}
+
+function generateRandomReadyMissingHand() {
+  const missingSuit = suits[randomInt(suits.length)].id;
+  const availableTiles = [];
+  for (const suit of suits) {
+    if (suit.id === missingSuit) continue;
+    for (let rank = 1; rank <= 9; rank += 1) {
+      const tile = `${rank}${suit.id}`;
+      for (let copy = 0; copy < 4; copy += 1) {
+        availableTiles.push(tile);
+      }
+    }
+  }
+
+  hand.splice(0, hand.length);
+  while (hand.length < 14) {
+    const index = randomInt(availableTiles.length);
+    const [tile] = availableTiles.splice(index, 1);
+    hand.push(tile);
+  }
+
+  document.querySelector("#missingSuit").value = missingSuit;
+  sortHand();
+  result.className = "result empty";
+  result.textContent = `已随机生成 14 张，并自动定缺${suits.find((suit) => suit.id === missingSuit).label}。点击确认分析查看结果。`;
+  resultStamp.textContent = "已生成";
+}
+
 function sortHand() {
   hand.sort((left, right) => tileSortValue(left) - tileSortValue(right));
   render();
@@ -160,6 +191,8 @@ handEl.addEventListener("drop", (event) => {
 });
 
 document.querySelector("#sortHand").addEventListener("click", sortHand);
+
+document.querySelector("#randomHand").addEventListener("click", generateRandomReadyMissingHand);
 
 document.querySelector("#suggestMissing").addEventListener("click", async () => {
   if (hand.length === 0) {
