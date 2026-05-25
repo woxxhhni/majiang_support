@@ -82,7 +82,7 @@ class MahjongWebHandler(SimpleHTTPRequestHandler):
             image_data = payload.get("image")
             if not image_data:
                 raise ValueError("缺少截图数据")
-            self._send_json(detect_screenshot_regions(str(image_data)))
+            self._send_json(detect_screenshot_regions(str(image_data), hand_captures=payload.get("hand_captures")))
         except Exception as exc:
             self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
 

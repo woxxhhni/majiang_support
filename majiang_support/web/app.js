@@ -1055,7 +1055,10 @@ document.querySelector("#scanScreenshot").addEventListener("click", async () => 
     const response = await fetch("/api/detect-screenshot", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: screenshotDataUrl }),
+      body: JSON.stringify({
+        image: screenshotDataUrl,
+        hand_captures: screenshotHandTiles.map((capture) => capture.url),
+      }),
     });
     modelPayload = await response.json();
     if (!response.ok) throw new Error(modelPayload.error || "模型识别失败");
