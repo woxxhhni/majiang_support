@@ -12,6 +12,7 @@ from majiang_support.core.hand import Hand
 from majiang_support.core.tile import parse_suit
 from majiang_support.strategy.dingque import recommend_dingque
 from majiang_support.strategy.discard import recommend_discard
+from majiang_support.vision.detector import detect_screenshot_regions
 
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "web"
@@ -33,6 +34,9 @@ class MahjongWebHandler(SimpleHTTPRequestHandler):
         if self.path == "/api/recommend-dingque":
             self._handle_recommend_dingque()
             return
+        if self.path == "/api/detect-screenshot":
+            self._handle_detect_screenshot()
+            return
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
     def _handle_recommend(self) -> None:
@@ -53,6 +57,16 @@ class MahjongWebHandler(SimpleHTTPRequestHandler):
             hand = Hand.parse(hand_text)
             recommendation = recommend_dingque(hand)
             self._send_json(_dingque_to_dict(recommendation))
+        except Exception as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
+    def _handle_detect_screenshot(self) -> None:
+        try:
+            payload = self._read_json_body()
+            image_data = payload.get("image")
+            if not image_data:
+                raise ValueError("缺少截图数据")
+            self._send_json(detect_screenshot_regions(str(image_data)))
         except Exception as exc:
             self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
 

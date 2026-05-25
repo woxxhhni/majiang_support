@@ -11,6 +11,14 @@ const handCount = document.querySelector("#handCount");
 const stateText = document.querySelector("#stateText");
 const result = document.querySelector("#result");
 const resultStamp = document.querySelector("#resultStamp");
+const screenshotInput = document.querySelector("#screenshotInput");
+const screenshotPreview = document.querySelector("#screenshotPreview");
+const handCaptures = document.querySelector("#handCaptures");
+const discardCaptures = document.querySelector("#discardCaptures");
+let screenshotImage = null;
+let screenshotDataUrl = "";
+let screenshotHandTiles = [];
+let screenshotDiscardTiles = [];
 
 function tileLabel(tile) {
   return `${tile[0]}${suits.find((suit) => suit.id === tile[1]).label}`;
@@ -363,6 +371,287 @@ function showDingQueResult(payload) {
       ${candidates}
     </div>
   `;
+}
+
+function allTileOptions() {
+  const options = ['<option value="">待确认</option>'];
+  for (const suit of suits) {
+    for (let rank = 1; rank <= 9; rank += 1) {
+      const tile = `${rank}${suit.id}`;
+      options.push(`<option value="${tile}">${tileLabel(tile)}</option>`);
+    }
+  }
+  return options.join("");
+}
+
+screenshotInput.addEventListener("change", () => {
+  const file = screenshotInput.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  const image = new Image();
+  image.onload = () => {
+    screenshotImage = image;
+    screenshotPreview.innerHTML = "";
+    screenshotPreview.append(image);
+    handCaptures.innerHTML = "";
+    discardCaptures.innerHTML = "";
+    screenshotHandTiles = [];
+    screenshotDiscardTiles = [];
+    result.className = "result empty";
+    result.textContent = "截图已加载，点击识别截图。第一版会切出牌面，需要你确认牌名。";
+    resultStamp.textContent = "截图已加载";
+  };
+  reader.onload = () => {
+    screenshotDataUrl = String(reader.result || "");
+    image.src = screenshotDataUrl;
+  };
+  reader.readAsDataURL(file);
+});
+
+document.querySelector("#scanScreenshot").addEventListener("click", async () => {
+  if (!screenshotImage) {
+    result.className = "result";
+    result.innerHTML = `<div class="error">先上传截图。</div>`;
+    resultStamp.textContent = "未完成";
+    return;
+  }
+  result.className = "result";
+  result.innerHTML = "正在裁剪截图并调用识别模型...";
+  resultStamp.textContent = "识别中";
+
+  screenshotHandTiles = extractHandTiles(screenshotImage);
+  screenshotDiscardTiles = extractDiscardTiles(screenshotImage);
+
+  let modelPayload = null;
+  try {
+    const response = await fetch("/api/detect-screenshot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: screenshotDataUrl }),
+    });
+    modelPayload = await response.json();
+    if (!response.ok) throw new Error(modelPayload.error || "模型识别失败");
+  } catch (error) {
+    renderCaptureCards(handCaptures, screenshotHandTiles, "handCapture");
+    renderCaptureCards(discardCaptures, screenshotDiscardTiles, "discardCapture");
+    result.className = "result";
+    result.innerHTML = `<div class="error">${error.message}</div>`;
+    resultStamp.textContent = "识别失败";
+    return;
+  }
+
+  renderCaptureCards(handCaptures, screenshotHandTiles, "handCapture", modelPayload.hand.tiles);
+  renderCaptureCards(discardCaptures, screenshotDiscardTiles, "discardCapture", modelPayload.discards.tiles);
+  result.className = "result empty";
+  result.textContent = `模型识别到手牌 ${modelPayload.hand.tiles.length} 张，牌河区域 ${modelPayload.discards.tiles.length} 张。请检查牌名，确认后导入手牌。`;
+  resultStamp.textContent = "已识别截图";
+});
+
+document.querySelector("#importScreenshotHand").addEventListener("click", () => {
+  const selectedTiles = [...document.querySelectorAll("#handCaptures select")]
+    .map((select) => select.value)
+    .filter(Boolean);
+  if (selectedTiles.length === 0) {
+    result.className = "result";
+    result.innerHTML = `<div class="error">请先在手牌截图里确认牌名。</div>`;
+    resultStamp.textContent = "未完成";
+    return;
+  }
+  if (selectedTiles.length > 14) {
+    result.className = "result";
+    result.innerHTML = `<div class="error">截图手牌超过 14 张，请只保留自己的手牌。</div>`;
+    resultStamp.textContent = "未完成";
+    return;
+  }
+  const counts = selectedTiles.reduce((acc, tile) => {
+    acc[tile] = (acc[tile] || 0) + 1;
+    return acc;
+  }, {});
+  const invalid = Object.entries(counts).find(([, count]) => count > 4);
+  if (invalid) {
+    result.className = "result";
+    result.innerHTML = `<div class="error">${tileLabel(invalid[0])} 超过 4 张。</div>`;
+    resultStamp.textContent = "未完成";
+    return;
+  }
+  hand.splice(0, hand.length, ...selectedTiles);
+  sortHand();
+  result.className = "result empty";
+  result.textContent = `已导入 ${selectedTiles.length} 张手牌。13 张时说明还没摸牌，摸到后补一张再确认分析。`;
+  resultStamp.textContent = "已导入";
+});
+
+function renderCaptureCards(container, captures, namePrefix, predictions = []) {
+  container.innerHTML = "";
+  const options = allTileOptions();
+  const count = Math.max(captures.length, predictions.length);
+  for (let index = 0; index < count; index += 1) {
+    const capture = captures[index];
+    const predicted = normalizePredictedTile(predictions[index] || "");
+    const card = document.createElement("div");
+    card.className = "capture-card";
+    card.innerHTML = `
+      ${capture ? `<img src="${capture.url}" alt="${namePrefix} ${index + 1}" />` : `<div class="capture-placeholder">模型识别</div>`}
+      <select aria-label="${namePrefix} ${index + 1}">
+        ${options}
+      </select>
+      ${predicted ? `<span class="model-tag">模型：${tileLabel(predicted)}</span>` : `<span class="model-tag muted">未识别</span>`}
+    `;
+    const select = card.querySelector("select");
+    if (predicted) {
+      select.value = predicted;
+    }
+    container.append(card);
+  }
+}
+
+function normalizePredictedTile(tile) {
+  if (!tile || tile.length < 2) return "";
+  const suit = tile.slice(-1);
+  const rank = tile.slice(0, -1);
+  if (!["m", "p", "s"].includes(suit)) return "";
+  if (!/^[1-9]$/.test(rank)) return "";
+  return `${rank}${suit}`;
+}
+
+function extractHandTiles(image) {
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d");
+  context.drawImage(image, 0, 0);
+
+  const captures = [];
+  const width = canvas.width;
+  const height = canvas.height;
+  const tileW = Math.round(width * 0.064);
+  const tileH = Math.round(height * 0.16);
+  const startX = Math.round(width * 0.022);
+  const startY = Math.round(height * 0.825);
+  const step = Math.round(width * 0.066);
+
+  for (let index = 0; index < 14; index += 1) {
+    const x = startX + index * step;
+    const crop = cropCanvas(canvas, x, startY, tileW, tileH);
+    if (brightRatio(crop) > 0.26) {
+      captures.push({ url: crop.toDataURL("image/png") });
+    }
+  }
+  return captures;
+}
+
+function extractDiscardTiles(image) {
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d");
+  context.drawImage(image, 0, 0);
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const regions = [
+    [0.30, 0.20, 0.45, 0.18],
+    [0.36, 0.48, 0.34, 0.18],
+  ];
+  const captures = [];
+  for (const [rx, ry, rw, rh] of regions) {
+    const region = cropCanvas(
+      canvas,
+      Math.round(width * rx),
+      Math.round(height * ry),
+      Math.round(width * rw),
+      Math.round(height * rh),
+    );
+    captures.push(...findWhiteTileComponents(region, Math.round(width * rx), Math.round(height * ry)));
+  }
+  return captures.slice(0, 24);
+}
+
+function cropCanvas(source, x, y, width, height) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext("2d").drawImage(source, x, y, width, height, 0, 0, width, height);
+  return canvas;
+}
+
+function brightRatio(canvas) {
+  const data = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+  let bright = 0;
+  for (let index = 0; index < data.length; index += 4) {
+    if (data[index] > 185 && data[index + 1] > 185 && data[index + 2] > 175) bright += 1;
+  }
+  return bright / (data.length / 4);
+}
+
+function findWhiteTileComponents(regionCanvas, offsetX, offsetY) {
+  const context = regionCanvas.getContext("2d");
+  const imageData = context.getImageData(0, 0, regionCanvas.width, regionCanvas.height);
+  const data = imageData.data;
+  const width = regionCanvas.width;
+  const height = regionCanvas.height;
+  const visited = new Uint8Array(width * height);
+  const captures = [];
+
+  function isTilePixel(index) {
+    const offset = index * 4;
+    return data[offset] > 185 && data[offset + 1] > 185 && data[offset + 2] > 170;
+  }
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const start = y * width + x;
+      if (visited[start] || !isTilePixel(start)) continue;
+      const queue = [start];
+      visited[start] = 1;
+      let minX = x;
+      let maxX = x;
+      let minY = y;
+      let maxY = y;
+      let pixels = 0;
+
+      while (queue.length) {
+        const current = queue.pop();
+        const cx = current % width;
+        const cy = Math.floor(current / width);
+        pixels += 1;
+        minX = Math.min(minX, cx);
+        maxX = Math.max(maxX, cx);
+        minY = Math.min(minY, cy);
+        maxY = Math.max(maxY, cy);
+
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = cx + dx;
+          const ny = cy + dy;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+          const next = ny * width + nx;
+          if (!visited[next] && isTilePixel(next)) {
+            visited[next] = 1;
+            queue.push(next);
+          }
+        }
+      }
+
+      const boxW = maxX - minX + 1;
+      const boxH = maxY - minY + 1;
+      if (pixels > 500 && boxW >= 34 && boxH >= 34 && boxW <= 150 && boxH <= 160) {
+        const pad = 8;
+        const crop = cropCanvas(
+          regionCanvas,
+          Math.max(0, minX - pad),
+          Math.max(0, minY - pad),
+          Math.min(regionCanvas.width - minX + pad, boxW + pad * 2),
+          Math.min(regionCanvas.height - minY + pad, boxH + pad * 2),
+        );
+        captures.push({
+          url: crop.toDataURL("image/png"),
+          x: offsetX + minX,
+          y: offsetY + minY,
+        });
+      }
+    }
+  }
+  return captures.sort((left, right) => left.y - right.y || left.x - right.x);
 }
 
 render();

@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Sichuan Mahjong decision engine."
 readme = "README.md"
 requires-python = ">=3.10"
+dependencies = [
+  "mahjong-detector==0.0.6",
+]
 
 [project.scripts]
 majiang = "majiang_support.app.cli:main"

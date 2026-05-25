@@ -142,6 +142,7 @@ select:hover {
 
 .hand-zone,
 .tile-picker,
+.screenshot-panel,
 .result-panel {
   padding: 16px;
 }
@@ -243,6 +244,94 @@ select:hover {
   border-color: var(--red);
   color: var(--red);
   font-weight: 800;
+}
+
+.screenshot-panel {
+  border-top: 1px solid var(--line);
+}
+
+.screenshot-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+
+.file-picker input {
+  margin-top: 6px;
+  display: block;
+  max-width: 260px;
+}
+
+.screenshot-preview {
+  margin-top: 12px;
+}
+
+.screenshot-preview img {
+  width: min(100%, 560px);
+  height: auto;
+  border: 1px solid var(--line);
+  display: block;
+}
+
+.capture-grid-wrap {
+  margin-top: 14px;
+}
+
+.capture-grid-wrap h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.capture-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 10px;
+}
+
+.capture-card {
+  border: 1px solid var(--line);
+  background: #fbfcfb;
+  padding: 8px;
+  display: grid;
+  gap: 7px;
+}
+
+.capture-card img {
+  width: 100%;
+  aspect-ratio: 0.72;
+  object-fit: cover;
+  border: 1px solid var(--tile-edge);
+  background: var(--tile);
+}
+
+.capture-placeholder {
+  width: 100%;
+  aspect-ratio: 0.72;
+  border: 1px dashed var(--line);
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  background: #f6f8f6;
+}
+
+.capture-card select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 6px;
+}
+
+.model-tag {
+  color: var(--green-dark);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.model-tag.muted {
+  color: var(--muted);
+  font-weight: 400;
 }
 
 .tile.m {

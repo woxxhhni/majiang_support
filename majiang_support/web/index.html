@@ -54,6 +54,30 @@
             </div>
             <div id="tilePool" class="tile-pool"></div>
           </section>
+
+          <section class="screenshot-panel" aria-label="截图导入">
+            <div class="section-title">
+              <h2>截图导入</h2>
+              <span>实验功能</span>
+            </div>
+            <div class="screenshot-controls">
+              <label class="file-picker">
+                上传截图
+                <input id="screenshotInput" type="file" accept="image/*" />
+              </label>
+              <button id="scanScreenshot" type="button">识别截图</button>
+              <button id="importScreenshotHand" type="button">导入截图手牌</button>
+            </div>
+            <div id="screenshotPreview" class="screenshot-preview"></div>
+            <div class="capture-grid-wrap">
+              <h3>手牌截图</h3>
+              <div id="handCaptures" class="capture-grid"></div>
+            </div>
+            <div class="capture-grid-wrap">
+              <h3>疑似已打出的牌</h3>
+              <div id="discardCaptures" class="capture-grid"></div>
+            </div>
+          </section>
         </div>
 
         <aside class="result-panel" aria-label="分析结果">
