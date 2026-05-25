@@ -34,11 +34,17 @@ function createTile(tile, options = {}) {
   button.className = `tile ${tile[1]}`;
   button.draggable = !options.disabled;
   button.dataset.tile = tile;
-  button.innerHTML = `<span><span class="rank">${tile[0]}</span><br><span class="suit">${tileLabel(tile).slice(1)}</span></span>`;
-  button.setAttribute("aria-label", tileLabel(tile));
+  const counter = options.countText ? `<span class="tile-count">${options.countText}</span>` : "";
+  button.innerHTML = `
+    ${counter}
+    <span><span class="rank">${tile[0]}</span><br><span class="suit">${tileLabel(tile).slice(1)}</span></span>
+  `;
+  const countLabel = options.countText ? `，已选 ${options.countText}` : "";
+  button.setAttribute("aria-label", `${tileLabel(tile)}${countLabel}`);
   if (options.disabled) {
     button.classList.add("used-up");
     button.disabled = true;
+    button.draggable = false;
   }
   return button;
 }
@@ -49,9 +55,17 @@ function renderPool() {
   for (const suit of suits) {
     for (let rank = 1; rank <= 9; rank += 1) {
       const tile = `${rank}${suit.id}`;
-      const button = createTile(tile, { disabled: (counts[tile] || 0) >= 4 });
+      const selectedCount = counts[tile] || 0;
+      const button = createTile(tile, {
+        disabled: selectedCount >= 4,
+        countText: `${selectedCount}/4`,
+      });
       button.addEventListener("click", () => addTile(tile));
       button.addEventListener("dragstart", (event) => {
+        if (selectedCount >= 4) {
+          event.preventDefault();
+          return;
+        }
         event.dataTransfer.setData("text/plain", JSON.stringify({ source: "pool", tile }));
       });
       tilePool.append(button);

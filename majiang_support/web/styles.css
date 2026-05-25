@@ -223,6 +223,26 @@ select:hover {
 .tile.used-up {
   opacity: 0.35;
   cursor: not-allowed;
+  filter: grayscale(0.4);
+}
+
+.tile-count {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  min-width: 24px;
+  padding: 1px 4px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.tile.used-up .tile-count {
+  border-color: var(--red);
+  color: var(--red);
+  font-weight: 800;
 }
 
 .tile.m {
@@ -345,4 +365,3 @@ select:hover {
     flex: 1 1 130px;
   }
 }
-
