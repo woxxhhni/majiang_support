@@ -13,6 +13,8 @@ def test_web_recommendation_payload_contains_display_fields():
     assert payload["best"]["label"] == "2筒"
     assert payload["missing_suit_active"] is True
     assert payload["candidates"][0]["effective_count"] >= 0
+    assert payload["candidates"][0]["best_route"]["label"]
+    assert payload["candidates"][0]["routes"]
     assert payload["best"]["reasons"]
 
 

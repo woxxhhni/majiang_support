@@ -1,4 +1,5 @@
 from majiang_support.core.hand import Hand
+from majiang_support.core.remaining import remaining_counts_after_discard
 from majiang_support.strategy.discard import recommend_discard
 
 
@@ -19,6 +20,7 @@ def test_recommend_discard_returns_sorted_candidates():
     recommendation = recommend_discard(hand, None)
     priorities = [
         (
+            candidate.ev,
             -candidate.shanten,
             candidate.effective.remaining_total,
             candidate.structure_score,
@@ -39,6 +41,7 @@ def test_recommend_discard_keeps_seven_pairs_route():
     recommendation = recommend_discard(hand, None)
 
     assert recommendation.best.tile.label == "7条"
+    assert recommendation.best.best_route.name == "七对"
     assert recommendation.best.seven_pairs_shanten == 0
     assert recommendation.best.standard_shanten > recommendation.best.seven_pairs_shanten
 
@@ -49,4 +52,12 @@ def test_effective_tiles_do_not_count_discarded_tile_as_remaining():
     recommendation = recommend_discard(hand, None)
     candidate = next(item for item in recommendation.candidates if item.tile.label == "5条")
 
-    assert candidate.effective.remaining_total == 44
+    assert candidate.effective.remaining_total == 45
+
+
+def test_remaining_counts_after_discard_use_original_hand_counts():
+    hand = Hand.parse("1m 1m 2m 3m 4m 5m 6m 7m 8m 2p 3p 4p 5s 6s")
+    remaining = remaining_counts_after_discard(hand, 22)
+
+    assert remaining[22] == 3
+    assert remaining[0] == 2

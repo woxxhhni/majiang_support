@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from majiang_support.core.effective import EffectiveTiles, calculate_effective_tiles
+from majiang_support.core.effective import EffectiveTiles
 from majiang_support.core.hand import Hand
+from majiang_support.core.remaining import remaining_counts_after_discard
 from majiang_support.core.shanten import (
-    calculate_best_shanten,
     calculate_seven_pairs_shanten,
     calculate_standard_shanten,
 )
 from majiang_support.core.tile import Tile
+from majiang_support.strategy.ev import RouteEvaluation, evaluate_routes
 from majiang_support.strategy.structure import evaluate_structure
 
 
@@ -23,6 +24,9 @@ class DiscardCandidate:
     effective: EffectiveTiles
     structure_score: int
     discard_value: int
+    best_route: RouteEvaluation
+    routes: tuple[RouteEvaluation, ...]
+    ev: float
     reasons: tuple[str, ...]
 
     @property
@@ -51,6 +55,7 @@ def recommend_discard(hand: Hand, missing_suit: str | None = None) -> Recommenda
         sorted(
             candidates,
             key=lambda item: (
+                item.ev,
                 -item.shanten,
                 item.effective.remaining_total,
                 item.structure_score,
@@ -71,19 +76,16 @@ def _score_discard(
     missing_active: bool,
 ) -> DiscardCandidate:
     after = hand.remove(tile_id)
-    remaining_counts = list(hand.remaining_counts_without_visible())
-    remaining_counts[tile_id] = max(0, remaining_counts[tile_id] - 1)
-    shanten = calculate_best_shanten(after)
+    remaining_counts = remaining_counts_after_discard(hand, tile_id)
+    routes = evaluate_routes(after, remaining_counts, forbidden_suit=forbidden_suit)
+    best_route = routes[0]
+    shanten = best_route.shanten
     standard_shanten = calculate_standard_shanten(after)
     seven_pairs_shanten = calculate_seven_pairs_shanten(after)
-    effective = calculate_effective_tiles(
-        after,
-        remaining_counts=tuple(remaining_counts),
-        forbidden_suit=forbidden_suit,
-    )
+    effective = best_route.effective
     structure_score = evaluate_structure(after)
     discard_value = evaluate_discard_value(hand, tile_id)
-    score = -1000 * shanten + 10 * effective.remaining_total + structure_score - discard_value
+    score = int(best_route.ev * 10000) - 100 * shanten + 10 * effective.remaining_total + structure_score - discard_value
     reasons = _build_reasons(
         hand,
         tile_id,
@@ -93,6 +95,7 @@ def _score_discard(
         effective,
         structure_score,
         discard_value,
+        best_route,
         missing_active,
     )
     return DiscardCandidate(
@@ -104,6 +107,9 @@ def _score_discard(
         effective=effective,
         structure_score=structure_score,
         discard_value=discard_value,
+        best_route=best_route,
+        routes=routes,
+        ev=best_route.ev,
         reasons=tuple(reasons),
     )
 
@@ -117,6 +123,7 @@ def _build_reasons(
     effective: EffectiveTiles,
     structure_score: int,
     discard_value: int,
+    best_route: RouteEvaluation,
     missing_active: bool,
 ) -> list[str]:
     tile = Tile.from_id(tile_id)
@@ -135,12 +142,14 @@ def _build_reasons(
     if hand.count(tile_id) >= 2:
         reasons.append(f"{tile.label} 是对子的一部分，打出会降低对子价值")
 
-    if seven_pairs_shanten < standard_shanten:
+    reasons.append(f"当前推荐路线：{best_route.label}，EV {best_route.ev:.3f}")
+
+    if best_route.name == "七对":
         reasons.append(f"打出后七对路线更近，综合向听数为 {shanten}")
-    elif standard_shanten < seven_pairs_shanten:
+    elif best_route.name == "平胡":
         reasons.append(f"打出后平胡路线更近，综合向听数为 {shanten}")
     else:
-        reasons.append(f"打出后平胡和七对路线同为 {shanten} 向听")
+        reasons.append(f"打出后 {best_route.label} 路线价值最高，路线向听数为 {shanten}")
     reasons.append(f"有效进张剩余 {effective.remaining_total} 张")
     reasons.append(f"保留结构评分为 {structure_score}")
     reasons.append(f"打出牌自身价值为 {discard_value}，越低越适合打")

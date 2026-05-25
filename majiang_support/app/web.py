@@ -100,7 +100,24 @@ def _candidate_to_dict(candidate: Any) -> dict[str, Any]:
         "effective_tiles": candidate.effective.labels,
         "structure_score": candidate.structure_score,
         "discard_value": candidate.discard_value,
+        "ev": round(candidate.ev, 6),
+        "best_route": _route_to_dict(candidate.best_route),
+        "routes": [_route_to_dict(route) for route in candidate.routes],
         "reasons": list(candidate.reasons),
+    }
+
+
+def _route_to_dict(route: Any) -> dict[str, Any]:
+    return {
+        "name": route.name,
+        "label": route.label,
+        "target_suit": route.target_suit,
+        "shanten": route.shanten,
+        "fan": route.fan,
+        "effective_count": route.effective.remaining_total,
+        "effective_tiles": route.effective.labels,
+        "probability": round(route.probability, 6),
+        "ev": round(route.ev, 6),
     }
 
 

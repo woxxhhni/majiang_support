@@ -245,6 +245,8 @@ function showResult(payload) {
             <span>进张 ${candidate.effective_count}</span>
             <span>结构 ${candidate.structure_score}</span>
             <span>弃牌价值 ${candidate.discard_value}</span>
+            <span>路线 ${candidate.best_route.label}</span>
+            <span>EV ${candidate.ev.toFixed(3)}</span>
           </div>
         </div>
       `,
@@ -257,9 +259,39 @@ function showResult(payload) {
       推荐打
       <strong>${payload.best.label}</strong>
     </div>
+    <div class="candidate">
+      <div class="candidate-head">
+        <span>推荐路线：${payload.best.best_route.label}</span>
+        <span>EV ${payload.best.ev.toFixed(3)}</span>
+      </div>
+      <div class="metrics">
+        <span>番数 ${payload.best.best_route.fan}</span>
+        <span>概率 ${payload.best.best_route.probability.toFixed(3)}</span>
+        <span>进张 ${payload.best.best_route.effective_count}</span>
+      </div>
+    </div>
     <ol class="reasons">
       ${payload.best.reasons.map((reason) => `<li>${reason}</li>`).join("")}
     </ol>
+    <div class="candidate-list">
+      ${payload.best.routes
+        .map(
+          (route) => `
+            <div class="candidate">
+              <div class="candidate-head">
+                <span>${route.label}</span>
+                <span>EV ${route.ev.toFixed(3)}</span>
+              </div>
+              <div class="metrics">
+                <span>向听 ${route.shanten}</span>
+                <span>番数 ${route.fan}</span>
+                <span>进张 ${route.effective_count}</span>
+              </div>
+            </div>
+          `,
+        )
+        .join("")}
+    </div>
     <div class="candidate-list">
       ${candidates}
     </div>
