@@ -278,6 +278,15 @@ function sortHand() {
 
 function addMeld(kind) {
   const tile = document.querySelector("#meldTile").value;
+
+  if (kind === "open_kong") {
+    const pongIndex = melds.findIndex((meld) => meld.tile === tile && meld.kind === "pong");
+    if (pongIndex >= 0) {
+      upgradePongToKong(tile, pongIndex);
+      return;
+    }
+  }
+
   const needed = kind === "pong" ? 3 : 4;
   const counts = visibleTileCounts();
   const currentMeldCopies = melds
@@ -288,6 +297,10 @@ function addMeld(kind) {
   const finalVisibleCopies = counts[tile] - freeCopies + needed;
   const finalPlayerTotal = playerTileTotal() - removedCopies + needed;
 
+  if (currentMeldCopies > 0) {
+    stateText.textContent = `${tileLabel(tile)} 已经有固定面子`;
+    return;
+  }
   if (finalVisibleCopies > 4 || currentMeldCopies + needed > 4) {
     stateText.textContent = `${tileLabel(tile)} 已经超过 4 张`;
     return;
@@ -297,19 +310,41 @@ function addMeld(kind) {
     return;
   }
 
-  let toRemove = removedCopies;
-  for (let index = hand.length - 1; index >= 0 && toRemove > 0; index -= 1) {
-    if (hand[index] === tile) {
-      hand.splice(index, 1);
-      toRemove -= 1;
-    }
-  }
+  removeFreeTiles(tile, removedCopies);
 
   melds.push({ kind, tile });
   result.className = "result empty";
   result.textContent = `已添加固定面子：${formatMeldText({ kind, tile })}。它会参与胡牌计算，但不会被推荐打出。`;
   resultStamp.textContent = "已更新";
   render();
+}
+
+function upgradePongToKong(tile, pongIndex) {
+  const freeCopies = hand.filter((item) => item === tile).length;
+  const removedCopies = Math.min(freeCopies, 1);
+  const finalPlayerTotal = playerTileTotal() - removedCopies + 1;
+
+  if (finalPlayerTotal > 14) {
+    stateText.textContent = "自由手牌 + 固定面子最多 14 张";
+    return;
+  }
+
+  removeFreeTiles(tile, removedCopies);
+  melds[pongIndex] = { kind: "added_kong", tile };
+  result.className = "result empty";
+  result.textContent = `已把 ${tileLabel(tile)} 从碰升级为杠。它会参与胡牌计算，但不会被推荐打出。`;
+  resultStamp.textContent = "已更新";
+  render();
+}
+
+function removeFreeTiles(tile, amount) {
+  let toRemove = amount;
+  for (let index = hand.length - 1; index >= 0 && toRemove > 0; index -= 1) {
+    if (hand[index] === tile) {
+      hand.splice(index, 1);
+      toRemove -= 1;
+    }
+  }
 }
 
 async function copyHandText() {
