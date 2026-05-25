@@ -577,8 +577,10 @@ function extractDiscardTiles(image) {
   const width = canvas.width;
   const height = canvas.height;
   const regions = [
-    [0.30, 0.20, 0.45, 0.18],
-    [0.36, 0.48, 0.34, 0.18],
+    [0.250, 0.115, 0.520, 0.250],
+    [0.610, 0.270, 0.170, 0.350],
+    [0.380, 0.510, 0.390, 0.180],
+    [0.245, 0.300, 0.170, 0.360],
   ];
   const captures = [];
   for (const [rx, ry, rw, rh] of regions) {
@@ -589,9 +591,19 @@ function extractDiscardTiles(image) {
       Math.round(width * rw),
       Math.round(height * rh),
     );
-    captures.push(...findWhiteTileComponents(region, Math.round(width * rx), Math.round(height * ry)));
+    captures.push(
+      ...findWhiteTileComponents(region, Math.round(width * rx), Math.round(height * ry), {
+        minPixels: 320,
+        minWidth: Math.round(width * 0.018),
+        minHeight: Math.round(height * 0.030),
+        maxWidth: Math.round(width * 0.095),
+        maxHeight: Math.round(height * 0.150),
+        pad: 6,
+        merge: true,
+      }),
+    );
   }
-  return captures.slice(0, 24);
+  return dedupeCaptures(captures).slice(0, 48);
 }
 
 function cropCanvas(source, x, y, width, height) {
@@ -702,6 +714,22 @@ function mergeNearbyCaptures(captures) {
     }
   }
   return merged;
+}
+
+function dedupeCaptures(captures) {
+  const sorted = captures.sort((left, right) => left.y - right.y || left.x - right.x);
+  const deduped = [];
+  for (const capture of sorted) {
+    const duplicate = deduped.find((item) => {
+      const dx = Math.abs(item.x - capture.x);
+      const dy = Math.abs(item.y - capture.y);
+      return dx < Math.max(item.width, capture.width) * 0.35 && dy < Math.max(item.height, capture.height) * 0.35;
+    });
+    if (!duplicate) {
+      deduped.push(capture);
+    }
+  }
+  return deduped;
 }
 
 render();
