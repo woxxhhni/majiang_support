@@ -57,12 +57,31 @@
             <div class="section-title">
               <div>
                 <h2>我的手牌</h2>
-                <span>需要 14 张</span>
+                <span>只放还能打出去的牌</span>
               </div>
               <button id="copyHand" class="small-button" type="button">复制</button>
             </div>
             <div id="hand" class="hand" aria-label="已输入手牌"></div>
             <div class="drop-hint">把牌拖到这里；点击手牌可移除</div>
+          </section>
+
+          <section class="meld-zone" aria-label="已碰或已杠的牌">
+            <div class="section-title">
+              <div>
+                <h2>已碰 / 已杠</h2>
+                <span>固定面子会参与胡牌计算，但不会被推荐打出</span>
+              </div>
+            </div>
+            <div class="meld-controls">
+              <label>
+                牌
+                <select id="meldTile"></select>
+              </label>
+              <button id="addPong" type="button">添加碰</button>
+              <button id="addOpenKong" type="button">添加杠</button>
+              <button id="clearMelds" type="button">清空碰杠</button>
+            </div>
+            <div id="melds" class="melds" aria-label="已输入固定面子"></div>
           </section>
 
           <section class="tile-picker" aria-label="牌池">

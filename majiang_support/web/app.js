@@ -5,8 +5,10 @@ const suits = [
 ];
 
 const hand = [];
+const melds = [];
 const tilePool = document.querySelector("#tilePool");
 const handEl = document.querySelector("#hand");
+const meldEl = document.querySelector("#melds");
 const handCount = document.querySelector("#handCount");
 const stateText = document.querySelector("#stateText");
 const result = document.querySelector("#result");
@@ -21,7 +23,14 @@ let screenshotHandTiles = [];
 let screenshotDiscardTiles = [];
 
 function populateIncomingTileSelect() {
-  const select = document.querySelector("#incomingTile");
+  populateTileSelect(document.querySelector("#incomingTile"));
+}
+
+function populateMeldTileSelect() {
+  populateTileSelect(document.querySelector("#meldTile"));
+}
+
+function populateTileSelect(select) {
   select.innerHTML = "";
   for (const suit of suits) {
     for (let rank = 1; rank <= 9; rank += 1) {
@@ -54,7 +63,12 @@ function escapeHtml(text) {
 }
 
 function handText() {
-  return hand.map(tileLabel).join(" ");
+  const freeText = hand.map(tileLabel).join(" ");
+  if (melds.length === 0) {
+    return freeText;
+  }
+  const meldText = melds.map(formatMeldText).join("；");
+  return `手牌：${freeText || "无"} | 固定面子：${meldText}`;
 }
 
 function tileSortValue(tile) {
@@ -67,6 +81,30 @@ function tileCounts() {
     counts[tile] = (counts[tile] || 0) + 1;
     return counts;
   }, {});
+}
+
+function meldTileCount(meld) {
+  return meld.kind === "pong" ? 3 : 4;
+}
+
+function visibleTileCounts() {
+  const counts = tileCounts();
+  for (const meld of melds) {
+    counts[meld.tile] = (counts[meld.tile] || 0) + meldTileCount(meld);
+  }
+  return counts;
+}
+
+function playerTileTotal() {
+  return hand.length + melds.reduce((total, meld) => total + meldTileCount(meld), 0);
+}
+
+function meldKindLabel(kind) {
+  return kind === "pong" ? "碰" : "杠";
+}
+
+function formatMeldText(meld) {
+  return `${meldKindLabel(meld.kind)} ${Array.from({ length: meldTileCount(meld) }, () => tileLabel(meld.tile)).join(" ")}`;
 }
 
 function createTile(tile, options = {}) {
@@ -92,7 +130,7 @@ function createTile(tile, options = {}) {
 
 function renderPool() {
   tilePool.innerHTML = "";
-  const counts = tileCounts();
+  const counts = visibleTileCounts();
   for (const suit of suits) {
     for (let rank = 1; rank <= 9; rank += 1) {
       const tile = `${rank}${suit.id}`;
@@ -130,27 +168,68 @@ function renderHand() {
     handEl.append(button);
   });
 
-  handCount.textContent = `${hand.length} / 14`;
-  if (hand.length === 14) {
+  const total = playerTileTotal();
+  handCount.textContent = `${total} / 14`;
+  if (total === 14) {
     stateText.textContent = "可以分析";
-  } else if (hand.length > 14) {
+  } else if (total > 14) {
     stateText.textContent = "手牌过多";
   } else {
     stateText.textContent = "继续输入";
   }
 }
 
+function renderMelds() {
+  meldEl.innerHTML = "";
+  if (melds.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "drop-hint";
+    empty.textContent = "还没有输入已碰或已杠的牌。";
+    meldEl.append(empty);
+    return;
+  }
+
+  melds.forEach((meld, index) => {
+    const card = document.createElement("div");
+    card.className = "meld-card";
+
+    const summary = document.createElement("div");
+    summary.innerHTML = `<strong>${meldKindLabel(meld.kind)} ${tileLabel(meld.tile)}</strong>`;
+
+    const tiles = document.createElement("div");
+    tiles.className = "meld-tiles";
+    for (let copy = 0; copy < meldTileCount(meld); copy += 1) {
+      const tileButton = createTile(meld.tile);
+      tileButton.draggable = false;
+      tiles.append(tileButton);
+    }
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "small-button";
+    remove.textContent = "移除";
+    remove.addEventListener("click", () => {
+      melds.splice(index, 1);
+      render();
+    });
+
+    card.append(summary, tiles, remove);
+    meldEl.append(card);
+  });
+}
+
 function render() {
   renderPool();
   renderHand();
+  renderMelds();
 }
 
 function addTile(tile) {
-  if (hand.length >= 14) {
+  if (playerTileTotal() >= 14) {
     stateText.textContent = "最多输入 14 张";
     return;
   }
-  if ((tileCounts()[tile] || 0) >= 4) {
+  if ((visibleTileCounts()[tile] || 0) >= 4) {
     stateText.textContent = `${tileLabel(tile)} 已经有 4 张`;
     return;
   }
@@ -176,6 +255,7 @@ function generateRandomReadyMissingHand() {
   }
 
   hand.splice(0, hand.length);
+  melds.splice(0, melds.length);
   while (hand.length < 14) {
     const index = randomInt(availableTiles.length);
     const [tile] = availableTiles.splice(index, 1);
@@ -194,8 +274,44 @@ function sortHand() {
   render();
 }
 
+function addMeld(kind) {
+  const tile = document.querySelector("#meldTile").value;
+  const needed = kind === "pong" ? 3 : 4;
+  const counts = visibleTileCounts();
+  const currentMeldCopies = melds
+    .filter((meld) => meld.tile === tile)
+    .reduce((total, meld) => total + meldTileCount(meld), 0);
+  const freeCopies = hand.filter((item) => item === tile).length;
+  const removedCopies = Math.min(freeCopies, needed);
+  const finalVisibleCopies = counts[tile] - freeCopies + needed;
+  const finalPlayerTotal = playerTileTotal() - removedCopies + needed;
+
+  if (finalVisibleCopies > 4 || currentMeldCopies + needed > 4) {
+    stateText.textContent = `${tileLabel(tile)} 已经超过 4 张`;
+    return;
+  }
+  if (finalPlayerTotal > 14) {
+    stateText.textContent = "自由手牌 + 固定面子最多 14 张";
+    return;
+  }
+
+  let toRemove = removedCopies;
+  for (let index = hand.length - 1; index >= 0 && toRemove > 0; index -= 1) {
+    if (hand[index] === tile) {
+      hand.splice(index, 1);
+      toRemove -= 1;
+    }
+  }
+
+  melds.push({ kind, tile });
+  result.className = "result empty";
+  result.textContent = `已添加固定面子：${formatMeldText({ kind, tile })}。它会参与胡牌计算，但不会被推荐打出。`;
+  resultStamp.textContent = "已更新";
+  render();
+}
+
 async function copyHandText() {
-  if (hand.length === 0) {
+  if (playerTileTotal() === 0) {
     result.className = "result";
     result.innerHTML = `<div class="error">现在还没有手牌可以复制。</div>`;
     resultStamp.textContent = "未完成";
@@ -236,7 +352,7 @@ function fallbackCopyText(text) {
 
 function insertDraggedTile(payload, targetIndex = hand.length) {
   if (payload.source === "pool") {
-    if (hand.length >= 14 || (tileCounts()[payload.tile] || 0) >= 4) {
+    if (playerTileTotal() >= 14 || (visibleTileCounts()[payload.tile] || 0) >= 4) {
       render();
       return;
     }
@@ -275,6 +391,15 @@ document.querySelector("#sortHand").addEventListener("click", sortHand);
 
 document.querySelector("#copyHand").addEventListener("click", copyHandText);
 
+document.querySelector("#addPong").addEventListener("click", () => addMeld("pong"));
+
+document.querySelector("#addOpenKong").addEventListener("click", () => addMeld("open_kong"));
+
+document.querySelector("#clearMelds").addEventListener("click", () => {
+  melds.splice(0, melds.length);
+  render();
+});
+
 document.querySelector("#randomHand").addEventListener("click", generateRandomReadyMissingHand);
 
 document.querySelector("#suggestMissing").addEventListener("click", async () => {
@@ -307,6 +432,7 @@ document.querySelector("#suggestMissing").addEventListener("click", async () => 
 
 document.querySelector("#clearHand").addEventListener("click", () => {
   hand.splice(0, hand.length);
+  melds.splice(0, melds.length);
   result.className = "result empty";
   result.textContent = "输入 14 张手牌并点击确认分析，推荐结果会显示在这里。";
   resultStamp.textContent = "未分析";
@@ -314,9 +440,9 @@ document.querySelector("#clearHand").addEventListener("click", () => {
 });
 
 document.querySelector("#analyze").addEventListener("click", async () => {
-  if (hand.length !== 14) {
+  if (playerTileTotal() !== 14) {
     result.className = "result";
-    result.innerHTML = `<div class="error">现在是 ${hand.length} 张手牌，需要 14 张才能分析。</div>`;
+    result.innerHTML = `<div class="error">现在总共是 ${playerTileTotal()} 张牌，需要自由手牌 + 固定面子合计 14 张才能分析。</div>`;
     resultStamp.textContent = "未完成";
     return;
   }
@@ -329,6 +455,7 @@ document.querySelector("#analyze").addEventListener("click", async () => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       hand,
+      melds,
       missing: document.querySelector("#missingSuit").value,
     }),
   });
@@ -345,15 +472,15 @@ document.querySelector("#analyze").addEventListener("click", async () => {
 
 document.querySelector("#analyzeAction").addEventListener("click", async () => {
   const scene = document.querySelector("#actionScene").value;
-  if (scene === "after_draw" && hand.length !== 14) {
+  if (scene === "after_draw" && playerTileTotal() !== 14) {
     result.className = "result";
-    result.innerHTML = `<div class="error">我摸牌后需要 14 张手牌。</div>`;
+    result.innerHTML = `<div class="error">我摸牌后需要自由手牌 + 固定面子合计 14 张。</div>`;
     resultStamp.textContent = "未完成";
     return;
   }
-  if (scene === "after_discard" && hand.length !== 13) {
+  if (scene === "after_discard" && playerTileTotal() !== 13) {
     result.className = "result";
-    result.innerHTML = `<div class="error">别人打牌后通常需要输入你当前 13 张手牌。</div>`;
+    result.innerHTML = `<div class="error">别人打牌后通常需要自由手牌 + 固定面子合计 13 张。</div>`;
     resultStamp.textContent = "未完成";
     return;
   }
@@ -365,6 +492,7 @@ document.querySelector("#analyzeAction").addEventListener("click", async () => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       hand,
+      melds,
       missing: document.querySelector("#missingSuit").value,
       scene,
       incoming: document.querySelector("#incomingTile").value,
@@ -639,6 +767,7 @@ document.querySelector("#importScreenshotHand").addEventListener("click", () => 
     resultStamp.textContent = "未完成";
     return;
   }
+  melds.splice(0, melds.length);
   hand.splice(0, hand.length, ...selectedTiles);
   sortHand();
   result.className = "result empty";
@@ -1110,5 +1239,6 @@ function dedupeCaptures(captures) {
 }
 
 populateIncomingTileSelect();
+populateMeldTileSelect();
 updateActionSceneFields();
 render();

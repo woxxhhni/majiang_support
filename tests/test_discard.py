@@ -20,13 +20,13 @@ def test_recommend_discard_returns_sorted_candidates():
     recommendation = recommend_discard(hand, None)
     priorities = [
         (
-            candidate.ev,
+            candidate.score,
             -candidate.shanten,
             candidate.effective.remaining_total,
             candidate.structure_score,
             -candidate.discard_value,
-            candidate.score,
-            -candidate.tile_id,
+            candidate.ev,
+            candidate.tile_id,
         )
         for candidate in recommendation.candidates
     ]
@@ -61,3 +61,13 @@ def test_remaining_counts_after_discard_use_original_hand_counts():
 
     assert remaining[22] == 3
     assert remaining[0] == 2
+
+
+def test_recommend_discard_prioritizes_shanten_before_route_ev():
+    hand = Hand.parse("1m 4m 5m 7m 7m 9m 9m 1p 3p 3p 4p 5p 5p 9p")
+
+    recommendation = recommend_discard(hand, None)
+
+    assert recommendation.best.tile.label == "9筒"
+    assert recommendation.best.shanten == 2
+    assert all(candidate.tile.label != "4万" for candidate in recommendation.candidates[:2])

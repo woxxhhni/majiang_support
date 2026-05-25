@@ -150,6 +150,7 @@ select:hover {
 }
 
 .hand-zone,
+.meld-zone,
 .tile-picker,
 .screenshot-panel,
 .result-panel {
@@ -204,6 +205,57 @@ select:hover {
   margin-top: 8px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.meld-zone {
+  border-top: 1px solid var(--line);
+}
+
+.meld-controls {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.melds {
+  display: grid;
+  gap: 8px;
+}
+
+.meld-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--line);
+  background: #f9fbf9;
+  padding: 8px;
+}
+
+.meld-card strong {
+  font-size: 14px;
+}
+
+.meld-tiles {
+  display: flex;
+  gap: 4px;
+}
+
+.meld-card .tile {
+  min-width: 34px;
+  width: 34px;
+  height: 46px;
+  cursor: default;
+}
+
+.meld-card .tile .rank {
+  font-size: 17px;
+}
+
+.meld-card .tile .suit {
+  font-size: 10px;
 }
 
 .tile-pool {

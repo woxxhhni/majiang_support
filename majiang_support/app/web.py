@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import unquote
 
 from majiang_support.core.hand import Hand
+from majiang_support.core.meld import Meld
 from majiang_support.core.tile import Tile, parse_suit
 from majiang_support.strategy.action import recommend_action_after_discard, recommend_action_after_draw
 from majiang_support.strategy.dingque import recommend_dingque
@@ -48,8 +49,9 @@ class MahjongWebHandler(SimpleHTTPRequestHandler):
             payload = self._read_json_body()
             hand_text = " ".join(str(tile) for tile in payload.get("hand", []))
             missing_suit = parse_suit(payload.get("missing"))
+            open_melds = _parse_open_melds(payload.get("melds", []))
             hand = Hand.parse(hand_text)
-            recommendation = recommend_discard(hand, missing_suit)
+            recommendation = recommend_discard(hand, missing_suit, open_melds=open_melds)
             self._send_json(_recommendation_to_dict(recommendation))
         except Exception as exc:
             self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
@@ -79,13 +81,14 @@ class MahjongWebHandler(SimpleHTTPRequestHandler):
             payload = self._read_json_body()
             hand_text = " ".join(str(tile) for tile in payload.get("hand", []))
             hand = Hand.parse(hand_text)
+            open_melds = _parse_open_melds(payload.get("melds", []))
             missing_suit = parse_suit(payload.get("missing"))
             scene = payload.get("scene")
             if scene == "after_discard":
                 incoming = Tile.parse(str(payload.get("incoming")))
-                recommendation = recommend_action_after_discard(hand, incoming.id, missing_suit)
+                recommendation = recommend_action_after_discard(hand, incoming.id, missing_suit, open_melds=open_melds)
             elif scene == "after_draw":
-                recommendation = recommend_action_after_draw(hand, missing_suit)
+                recommendation = recommend_action_after_draw(hand, missing_suit, open_melds=open_melds)
             else:
                 raise ValueError("未知动作场景")
             self._send_json(_action_recommendation_to_dict(recommendation))
@@ -122,6 +125,22 @@ def _recommendation_to_dict(recommendation: Any) -> dict[str, Any]:
         "missing_suit_active": recommendation.missing_suit_active,
         "candidates": [_candidate_to_dict(candidate) for candidate in recommendation.candidates],
     }
+
+
+def _parse_open_melds(raw_melds: Any) -> tuple[Meld, ...]:
+    if not raw_melds:
+        return ()
+
+    melds = []
+    for raw in raw_melds:
+        if not isinstance(raw, dict):
+            raise ValueError("副露数据格式不正确")
+        kind = str(raw.get("kind", "")).strip()
+        if kind not in {"pong", "open_kong", "concealed_kong", "added_kong"}:
+            raise ValueError(f"未知副露类型: {kind}")
+        tile = Tile.parse(str(raw.get("tile", "")))
+        melds.append(Meld(kind=kind, tile_id=tile.id))
+    return tuple(melds)
 
 
 def _candidate_to_dict(candidate: Any) -> dict[str, Any]:

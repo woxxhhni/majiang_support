@@ -60,13 +60,13 @@ def recommend_discard(
         sorted(
             candidates,
             key=lambda item: (
-                item.ev,
+                item.score,
                 -item.shanten,
                 item.effective.remaining_total,
                 item.structure_score,
                 -item.discard_value,
-                item.score,
-                -item.tile_id,
+                item.ev,
+                item.tile_id,
             ),
             reverse=True,
         )
@@ -91,7 +91,7 @@ def _score_discard(
     effective = best_route.effective
     structure_score = evaluate_structure(after)
     discard_value = evaluate_discard_value(hand, tile_id)
-    score = int(best_route.ev * 10000) - 100 * shanten + 10 * effective.remaining_total + structure_score - discard_value
+    score = -1000 * shanten + 10 * effective.remaining_total + structure_score - discard_value + int(best_route.ev * 1000)
     reasons = _build_reasons(
         hand,
         tile_id,

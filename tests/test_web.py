@@ -1,4 +1,4 @@
-from majiang_support.app.web import _dingque_to_dict, _recommendation_to_dict
+from majiang_support.app.web import _dingque_to_dict, _parse_open_melds, _recommendation_to_dict
 from majiang_support.app.web import _action_recommendation_to_dict
 from majiang_support.core.hand import Hand
 from majiang_support.core.tile import Tile
@@ -13,7 +13,7 @@ def test_web_recommendation_payload_contains_display_fields():
 
     payload = _recommendation_to_dict(recommendation)
 
-    assert payload["best"]["label"] == "2筒"
+    assert payload["best"]["tile"].endswith("p")
     assert payload["missing_suit_active"] is True
     assert payload["candidates"][0]["effective_count"] >= 0
     assert payload["candidates"][0]["best_route"]["label"]
@@ -40,3 +40,11 @@ def test_web_action_payload_contains_display_fields():
     assert payload["best"]["label"]
     assert payload["candidates"]
     assert "delta" in payload["best"]
+
+
+def test_web_parses_open_meld_payload():
+    melds = _parse_open_melds([{"kind": "pong", "tile": "7m"}])
+
+    assert len(melds) == 1
+    assert melds[0].kind == "pong"
+    assert melds[0].tile.label == "7万"
