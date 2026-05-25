@@ -151,6 +151,7 @@ select:hover {
 
 .hand-zone,
 .meld-zone,
+.discard-zone,
 .tile-picker,
 .screenshot-panel,
 .result-panel {
@@ -207,7 +208,8 @@ select:hover {
   font-size: 13px;
 }
 
-.meld-zone {
+.meld-zone,
+.discard-zone {
   border-top: 1px solid var(--line);
 }
 
@@ -222,6 +224,17 @@ select:hover {
 .melds {
   display: grid;
   gap: 8px;
+}
+
+.discard-list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.discard-list .tile {
+  cursor: pointer;
 }
 
 .meld-card {

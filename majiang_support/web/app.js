@@ -6,9 +6,11 @@ const suits = [
 
 const hand = [];
 const melds = [];
+const discards = [];
 const tilePool = document.querySelector("#tilePool");
 const handEl = document.querySelector("#hand");
 const meldEl = document.querySelector("#melds");
+const discardEl = document.querySelector("#discards");
 const handCount = document.querySelector("#handCount");
 const stateText = document.querySelector("#stateText");
 const result = document.querySelector("#result");
@@ -28,6 +30,10 @@ function populateIncomingTileSelect() {
 
 function populateMeldTileSelect() {
   populateTileSelect(document.querySelector("#meldTile"));
+}
+
+function populateDiscardTileSelect() {
+  populateTileSelect(document.querySelector("#discardTile"));
 }
 
 function populateTileSelect(select) {
@@ -64,11 +70,12 @@ function escapeHtml(text) {
 
 function handText() {
   const freeText = hand.map(tileLabel).join(" ");
+  const discardText = discards.length ? ` | 已打：${discards.map(tileLabel).join(" ")}` : "";
   if (melds.length === 0) {
-    return freeText;
+    return `${freeText || "无"}${discardText}`;
   }
   const meldText = melds.map(formatMeldText).join("；");
-  return `手牌：${freeText || "无"} | 固定面子：${meldText}`;
+  return `手牌：${freeText || "无"} | 固定面子：${meldText}${discardText}`;
 }
 
 function tileSortValue(tile) {
@@ -91,6 +98,9 @@ function visibleTileCounts() {
   const counts = tileCounts();
   for (const meld of melds) {
     counts[meld.tile] = (counts[meld.tile] || 0) + meldTileCount(meld);
+  }
+  for (const tile of discards) {
+    counts[tile] = (counts[tile] || 0) + 1;
   }
   return counts;
 }
@@ -220,10 +230,32 @@ function renderMelds() {
   });
 }
 
+function renderDiscards() {
+  discardEl.innerHTML = "";
+  if (discards.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "drop-hint";
+    empty.textContent = "还没有输入已打出的牌。";
+    discardEl.append(empty);
+    return;
+  }
+
+  discards.forEach((tile, index) => {
+    const button = createTile(tile);
+    button.title = "点击移除这张已打牌";
+    button.addEventListener("click", () => {
+      discards.splice(index, 1);
+      render();
+    });
+    discardEl.append(button);
+  });
+}
+
 function render() {
   renderPool();
   renderHand();
   renderMelds();
+  renderDiscards();
 }
 
 function addTile(tile) {
@@ -258,6 +290,7 @@ function generateRandomReadyMissingHand() {
 
   hand.splice(0, hand.length);
   melds.splice(0, melds.length);
+  discards.splice(0, discards.length);
   while (hand.length < 14) {
     const index = randomInt(availableTiles.length);
     const [tile] = availableTiles.splice(index, 1);
@@ -315,6 +348,19 @@ function addMeld(kind) {
   melds.push({ kind, tile });
   result.className = "result empty";
   result.textContent = `已添加固定面子：${formatMeldText({ kind, tile })}。它会参与胡牌计算，但不会被推荐打出。`;
+  resultStamp.textContent = "已更新";
+  render();
+}
+
+function addDiscard() {
+  const tile = document.querySelector("#discardTile").value;
+  if ((visibleTileCounts()[tile] || 0) >= 4) {
+    stateText.textContent = `${tileLabel(tile)} 已经有 4 张`;
+    return;
+  }
+  discards.push(tile);
+  result.className = "result empty";
+  result.textContent = `已记录已打出的牌：${tileLabel(tile)}。后续进张和 EV 会扣掉这张牌。`;
   resultStamp.textContent = "已更新";
   render();
 }
@@ -437,6 +483,13 @@ document.querySelector("#clearMelds").addEventListener("click", () => {
   render();
 });
 
+document.querySelector("#addDiscard").addEventListener("click", addDiscard);
+
+document.querySelector("#clearDiscards").addEventListener("click", () => {
+  discards.splice(0, discards.length);
+  render();
+});
+
 document.querySelector("#randomHand").addEventListener("click", generateRandomReadyMissingHand);
 
 document.querySelector("#suggestMissing").addEventListener("click", async () => {
@@ -470,6 +523,7 @@ document.querySelector("#suggestMissing").addEventListener("click", async () => 
 document.querySelector("#clearHand").addEventListener("click", () => {
   hand.splice(0, hand.length);
   melds.splice(0, melds.length);
+  discards.splice(0, discards.length);
   result.className = "result empty";
   result.textContent = "输入 14 张手牌并点击确认分析，推荐结果会显示在这里。";
   resultStamp.textContent = "未分析";
@@ -493,6 +547,7 @@ document.querySelector("#analyze").addEventListener("click", async () => {
     body: JSON.stringify({
       hand,
       melds,
+      discards,
       missing: document.querySelector("#missingSuit").value,
     }),
   });
@@ -530,6 +585,7 @@ document.querySelector("#analyzeAction").addEventListener("click", async () => {
     body: JSON.stringify({
       hand,
       melds,
+      discards,
       missing: document.querySelector("#missingSuit").value,
       scene,
       incoming: document.querySelector("#incomingTile").value,
@@ -805,6 +861,7 @@ document.querySelector("#importScreenshotHand").addEventListener("click", () => 
     return;
   }
   melds.splice(0, melds.length);
+  discards.splice(0, discards.length);
   hand.splice(0, hand.length, ...selectedTiles);
   sortHand();
   result.className = "result empty";
@@ -1277,5 +1334,6 @@ function dedupeCaptures(captures) {
 
 populateIncomingTileSelect();
 populateMeldTileSelect();
+populateDiscardTileSelect();
 updateActionSceneFields();
 render();

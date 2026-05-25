@@ -46,6 +46,7 @@ def recommend_discard(
     hand: Hand,
     missing_suit: str | None = None,
     open_melds: tuple[Meld, ...] = (),
+    visible_counts: tuple[int, ...] | None = None,
 ) -> Recommendation:
     if hand.size not in {2, 5, 8, 11, 14}:
         raise ValueError("出牌推荐需要 14 张手牌，或包含副露后的 3n+2 张手牌")
@@ -53,7 +54,7 @@ def recommend_discard(
     discard_ids = hand.candidate_discards(missing_suit)
     missing_active = bool(missing_suit and hand.has_suit(missing_suit))
     candidates = [
-        _score_discard(hand, tile_id, missing_suit if missing_active else None, missing_active, open_melds)
+        _score_discard(hand, tile_id, missing_suit if missing_active else None, missing_active, open_melds, visible_counts)
         for tile_id in discard_ids
     ]
     ordered = tuple(
@@ -80,9 +81,10 @@ def _score_discard(
     forbidden_suit: str | None,
     missing_active: bool,
     open_melds: tuple[Meld, ...],
+    visible_counts: tuple[int, ...] | None,
 ) -> DiscardCandidate:
     after = hand.remove(tile_id)
-    remaining_counts = remaining_counts_after_discard(hand, tile_id, melds=open_melds)
+    remaining_counts = remaining_counts_after_discard(hand, tile_id, visible_counts=visible_counts, melds=open_melds)
     routes = evaluate_routes(after, remaining_counts, forbidden_suit=forbidden_suit, open_melds=open_melds)
     best_route = routes[0]
     shanten = best_route.shanten

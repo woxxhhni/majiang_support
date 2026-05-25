@@ -84,6 +84,24 @@
             <div id="melds" class="melds" aria-label="已输入固定面子"></div>
           </section>
 
+          <section class="discard-zone" aria-label="已打出的牌">
+            <div class="section-title">
+              <div>
+                <h2>已打出的牌</h2>
+                <span>会从剩余牌里扣除，用来修正进张和 EV</span>
+              </div>
+            </div>
+            <div class="meld-controls">
+              <label>
+                牌
+                <select id="discardTile"></select>
+              </label>
+              <button id="addDiscard" type="button">添加已打</button>
+              <button id="clearDiscards" type="button">清空已打</button>
+            </div>
+            <div id="discards" class="discard-list" aria-label="已输入打出牌"></div>
+          </section>
+
           <section class="tile-picker" aria-label="牌池">
             <div class="section-title">
               <h2>牌池</h2>

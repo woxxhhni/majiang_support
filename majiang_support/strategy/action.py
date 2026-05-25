@@ -40,8 +40,9 @@ def recommend_action_after_draw(
     hand: Hand,
     missing_suit: str | None = None,
     open_melds: tuple[Meld, ...] = (),
+    visible_counts: tuple[int, ...] | None = None,
 ) -> ActionRecommendation:
-    discard_rec = recommend_discard(hand, missing_suit, open_melds=open_melds)
+    discard_rec = recommend_discard(hand, missing_suit, open_melds=open_melds, visible_counts=visible_counts)
     pass_candidate = ActionCandidate(
         action="discard",
         label=f"直接打 {discard_rec.best.tile.label}",
@@ -56,7 +57,7 @@ def recommend_action_after_draw(
 
     for tile_id in hand.unique_tile_ids():
         if hand.count(tile_id) == 4:
-            candidates.append(_evaluate_concealed_kong(hand, tile_id, discard_rec.best.ev, missing_suit, open_melds))
+            candidates.append(_evaluate_concealed_kong(hand, tile_id, discard_rec.best.ev, missing_suit, open_melds, visible_counts))
 
     return _rank_actions(candidates)
 
@@ -66,8 +67,9 @@ def recommend_action_after_discard(
     incoming_tile_id: int,
     missing_suit: str | None = None,
     open_melds: tuple[Meld, ...] = (),
+    visible_counts: tuple[int, ...] | None = None,
 ) -> ActionRecommendation:
-    before_route = _best_waiting_route(hand, missing_suit, open_melds)
+    before_route = _best_waiting_route(hand, missing_suit, open_melds, visible_counts)
     pass_candidate = ActionCandidate(
         action="pass",
         label="过",
@@ -84,9 +86,9 @@ def recommend_action_after_discard(
         return _rank_actions(candidates)
 
     if hand.count(incoming_tile_id) >= 2:
-        candidates.append(_evaluate_pong(hand, incoming_tile_id, before_route.ev, missing_suit, open_melds))
+        candidates.append(_evaluate_pong(hand, incoming_tile_id, before_route.ev, missing_suit, open_melds, visible_counts))
     if hand.count(incoming_tile_id) >= 3:
-        candidates.append(_evaluate_open_kong(hand, incoming_tile_id, before_route.ev, missing_suit, open_melds))
+        candidates.append(_evaluate_open_kong(hand, incoming_tile_id, before_route.ev, missing_suit, open_melds, visible_counts))
 
     return _rank_actions(candidates)
 
@@ -97,10 +99,11 @@ def _evaluate_pong(
     ev_before: float,
     missing_suit: str | None,
     open_melds: tuple[Meld, ...],
+    visible_counts: tuple[int, ...] | None,
 ) -> ActionCandidate:
     after = hand.remove(tile_id).remove(tile_id)
     melds = open_melds + (Meld("pong", tile_id),)
-    discard_rec = recommend_discard(after, missing_suit, open_melds=melds)
+    discard_rec = recommend_discard(after, missing_suit, open_melds=melds, visible_counts=visible_counts)
     ev_after = discard_rec.best.ev
     delta = ev_after - ev_before - PONG_EXPOSURE_COST
     tile = Tile.from_id(tile_id)
@@ -126,10 +129,11 @@ def _evaluate_open_kong(
     ev_before: float,
     missing_suit: str | None,
     open_melds: tuple[Meld, ...],
+    visible_counts: tuple[int, ...] | None,
 ) -> ActionCandidate:
     after = hand.remove(tile_id).remove(tile_id).remove(tile_id)
     melds = open_melds + (Meld("open_kong", tile_id),)
-    route = _best_waiting_route(after, missing_suit, melds)
+    route = _best_waiting_route(after, missing_suit, melds, visible_counts)
     ev_after = route.ev + OPEN_KONG_IMMEDIATE_VALUE + SUPPLEMENT_DRAW_VALUE - OPEN_KONG_EXPOSURE_COST
     delta = ev_after - ev_before
     tile = Tile.from_id(tile_id)
@@ -155,10 +159,11 @@ def _evaluate_concealed_kong(
     ev_before: float,
     missing_suit: str | None,
     open_melds: tuple[Meld, ...],
+    visible_counts: tuple[int, ...] | None,
 ) -> ActionCandidate:
     after = hand.remove(tile_id).remove(tile_id).remove(tile_id).remove(tile_id)
     melds = open_melds + (Meld("concealed_kong", tile_id),)
-    route = _best_waiting_route(after, missing_suit, melds)
+    route = _best_waiting_route(after, missing_suit, melds, visible_counts)
     ev_after = route.ev + CONCEALED_KONG_IMMEDIATE_VALUE + SUPPLEMENT_DRAW_VALUE - CONCEALED_KONG_COST
     delta = ev_after - ev_before
     tile = Tile.from_id(tile_id)
@@ -178,11 +183,16 @@ def _evaluate_concealed_kong(
     )
 
 
-def _best_waiting_route(hand: Hand, missing_suit: str | None, open_melds: tuple[Meld, ...]) -> RouteEvaluation:
+def _best_waiting_route(
+    hand: Hand,
+    missing_suit: str | None,
+    open_melds: tuple[Meld, ...],
+    visible_counts: tuple[int, ...] | None,
+) -> RouteEvaluation:
     forbidden_suit = missing_suit if missing_suit and hand.has_suit(missing_suit) else None
     routes = evaluate_routes(
         hand,
-        remaining_counts_for_waiting(hand, melds=open_melds),
+        remaining_counts_for_waiting(hand, visible_counts=visible_counts, melds=open_melds),
         forbidden_suit=forbidden_suit,
         open_melds=open_melds,
     )
@@ -192,4 +202,3 @@ def _best_waiting_route(hand: Hand, missing_suit: str | None, open_melds: tuple[
 def _rank_actions(candidates: list[ActionCandidate]) -> ActionRecommendation:
     ordered = tuple(sorted(candidates, key=lambda item: (item.delta, item.ev_after), reverse=True))
     return ActionRecommendation(best=ordered[0], candidates=ordered)
-

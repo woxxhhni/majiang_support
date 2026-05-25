@@ -1,4 +1,4 @@
-from majiang_support.app.web import _dingque_to_dict, _parse_open_melds, _recommendation_to_dict
+from majiang_support.app.web import _dingque_to_dict, _parse_open_melds, _parse_visible_counts, _recommendation_to_dict
 from majiang_support.app.web import _action_recommendation_to_dict
 from majiang_support.core.hand import Hand
 from majiang_support.core.tile import Tile
@@ -48,3 +48,10 @@ def test_web_parses_open_meld_payload():
     assert len(melds) == 1
     assert melds[0].kind == "pong"
     assert melds[0].tile.label == "7万"
+
+
+def test_web_parses_visible_discard_counts():
+    counts = _parse_visible_counts(["2m", "2m", "5p"])
+
+    assert counts[Tile.parse("2m").id] == 2
+    assert counts[Tile.parse("5p").id] == 1

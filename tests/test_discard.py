@@ -1,5 +1,6 @@
 from majiang_support.core.hand import Hand
 from majiang_support.core.remaining import remaining_counts_after_discard
+from majiang_support.core.tile import Tile
 from majiang_support.strategy.discard import recommend_discard
 
 
@@ -71,3 +72,14 @@ def test_recommend_discard_prioritizes_shanten_before_route_ev():
     assert recommendation.best.tile.label == "9筒"
     assert recommendation.best.shanten == 2
     assert all(candidate.tile.label != "4万" for candidate in recommendation.candidates[:2])
+
+
+def test_visible_discards_reduce_effective_tiles():
+    hand = Hand.parse("1m 4m 5m 7m 7m 9m 9m 1p 3p 3p 4p 5p 5p 9p")
+    visible = [0] * 27
+    visible[Tile.parse("1m").id] = 3
+
+    recommendation = recommend_discard(hand, None, visible_counts=tuple(visible))
+    discard_9p = next(candidate for candidate in recommendation.candidates if str(candidate.tile) == "9p")
+
+    assert Tile.parse("1m").id not in discard_9p.effective.tile_ids

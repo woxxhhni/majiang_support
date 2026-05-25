@@ -50,8 +50,14 @@ class MahjongWebHandler(SimpleHTTPRequestHandler):
             hand_text = " ".join(str(tile) for tile in payload.get("hand", []))
             missing_suit = parse_suit(payload.get("missing"))
             open_melds = _parse_open_melds(payload.get("melds", []))
+            visible_counts = _parse_visible_counts(payload.get("discards", []))
             hand = Hand.parse(hand_text)
-            recommendation = recommend_discard(hand, missing_suit, open_melds=open_melds)
+            recommendation = recommend_discard(
+                hand,
+                missing_suit,
+                open_melds=open_melds,
+                visible_counts=visible_counts,
+            )
             self._send_json(_recommendation_to_dict(recommendation))
         except Exception as exc:
             self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
@@ -82,13 +88,25 @@ class MahjongWebHandler(SimpleHTTPRequestHandler):
             hand_text = " ".join(str(tile) for tile in payload.get("hand", []))
             hand = Hand.parse(hand_text)
             open_melds = _parse_open_melds(payload.get("melds", []))
+            visible_counts = _parse_visible_counts(payload.get("discards", []))
             missing_suit = parse_suit(payload.get("missing"))
             scene = payload.get("scene")
             if scene == "after_discard":
                 incoming = Tile.parse(str(payload.get("incoming")))
-                recommendation = recommend_action_after_discard(hand, incoming.id, missing_suit, open_melds=open_melds)
+                recommendation = recommend_action_after_discard(
+                    hand,
+                    incoming.id,
+                    missing_suit,
+                    open_melds=open_melds,
+                    visible_counts=visible_counts,
+                )
             elif scene == "after_draw":
-                recommendation = recommend_action_after_draw(hand, missing_suit, open_melds=open_melds)
+                recommendation = recommend_action_after_draw(
+                    hand,
+                    missing_suit,
+                    open_melds=open_melds,
+                    visible_counts=visible_counts,
+                )
             else:
                 raise ValueError("未知动作场景")
             self._send_json(_action_recommendation_to_dict(recommendation))
@@ -141,6 +159,16 @@ def _parse_open_melds(raw_melds: Any) -> tuple[Meld, ...]:
         tile = Tile.parse(str(raw.get("tile", "")))
         melds.append(Meld(kind=kind, tile_id=tile.id))
     return tuple(melds)
+
+
+def _parse_visible_counts(raw_tiles: Any) -> tuple[int, ...]:
+    counts = [0] * 27
+    for raw in raw_tiles or []:
+        tile = Tile.parse(str(raw))
+        counts[tile.id] += 1
+        if counts[tile.id] > 4:
+            raise ValueError(f"{tile.label} 已打出数量超过 4 张")
+    return tuple(counts)
 
 
 def _candidate_to_dict(candidate: Any) -> dict[str, Any]:
