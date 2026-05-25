@@ -99,6 +99,10 @@ function meldTileCount(meld) {
   return meld.kind === "pong" ? 3 : 4;
 }
 
+function meldHandTileCount(_meld) {
+  return 3;
+}
+
 function visibleTileCounts() {
   const counts = tileCounts();
   for (const meld of melds) {
@@ -111,7 +115,7 @@ function visibleTileCounts() {
 }
 
 function playerTileTotal() {
-  return hand.length + melds.reduce((total, meld) => total + meldTileCount(meld), 0);
+  return hand.length + melds.reduce((total, meld) => total + meldHandTileCount(meld), 0);
 }
 
 function meldKindLabel(kind) {
@@ -329,21 +333,22 @@ function addMeld(kind, tileOverride = null) {
     }
   }
 
-  const needed = kind === "pong" ? 3 : 4;
+  const visibleNeeded = kind === "pong" ? 3 : 4;
+  const handSlots = 3;
   const counts = visibleTileCounts();
   const currentMeldCopies = melds
     .filter((meld) => meld.tile === tile)
     .reduce((total, meld) => total + meldTileCount(meld), 0);
   const freeCopies = hand.filter((item) => item === tile).length;
-  const removedCopies = Math.min(freeCopies, needed);
-  const finalVisibleCopies = counts[tile] - freeCopies + needed;
-  const finalPlayerTotal = playerTileTotal() - removedCopies + needed;
+  const removedCopies = Math.min(freeCopies, visibleNeeded);
+  const finalVisibleCopies = counts[tile] - freeCopies + visibleNeeded;
+  const finalPlayerTotal = playerTileTotal() - removedCopies + handSlots;
 
   if (currentMeldCopies > 0) {
     stateText.textContent = `${tileLabel(tile)} 已经有固定面子`;
     return;
   }
-  if (finalVisibleCopies > 4 || currentMeldCopies + needed > 4) {
+  if (finalVisibleCopies > 4 || currentMeldCopies + visibleNeeded > 4) {
     stateText.textContent = `${tileLabel(tile)} 已经超过 4 张`;
     return;
   }
@@ -382,7 +387,7 @@ function addDiscardTile(tile, targetIndex = discards.length) {
 function upgradePongToKong(tile, pongIndex) {
   const freeCopies = hand.filter((item) => item === tile).length;
   const removedCopies = Math.min(freeCopies, 1);
-  const finalPlayerTotal = playerTileTotal() - removedCopies + 1;
+  const finalPlayerTotal = playerTileTotal() - removedCopies;
 
   if (finalPlayerTotal > 14) {
     stateText.textContent = "自由手牌 + 固定面子最多 14 张";
