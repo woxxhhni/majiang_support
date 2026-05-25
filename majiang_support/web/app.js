@@ -230,6 +230,7 @@ function showResult(payload) {
             <span>向听 ${candidate.shanten}</span>
             <span>进张 ${candidate.effective_count}</span>
             <span>结构 ${candidate.structure_score}</span>
+            <span>弃牌价值 ${candidate.discard_value}</span>
           </div>
         </div>
       `,

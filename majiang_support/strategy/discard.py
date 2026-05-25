@@ -4,7 +4,11 @@ from dataclasses import dataclass
 
 from majiang_support.core.effective import EffectiveTiles, calculate_effective_tiles
 from majiang_support.core.hand import Hand
-from majiang_support.core.shanten import calculate_standard_shanten
+from majiang_support.core.shanten import (
+    calculate_best_shanten,
+    calculate_seven_pairs_shanten,
+    calculate_standard_shanten,
+)
 from majiang_support.core.tile import Tile
 from majiang_support.strategy.structure import evaluate_structure
 
@@ -14,8 +18,11 @@ class DiscardCandidate:
     tile_id: int
     score: int
     shanten: int
+    standard_shanten: int
+    seven_pairs_shanten: int
     effective: EffectiveTiles
     structure_score: int
+    discard_value: int
     reasons: tuple[str, ...]
 
     @property
@@ -44,10 +51,11 @@ def recommend_discard(hand: Hand, missing_suit: str | None = None) -> Recommenda
         sorted(
             candidates,
             key=lambda item: (
-                item.score,
                 -item.shanten,
                 item.effective.remaining_total,
                 item.structure_score,
+                -item.discard_value,
+                item.score,
                 -item.tile_id,
             ),
             reverse=True,
@@ -63,17 +71,39 @@ def _score_discard(
     missing_active: bool,
 ) -> DiscardCandidate:
     after = hand.remove(tile_id)
-    shanten = calculate_standard_shanten(after)
-    effective = calculate_effective_tiles(after, forbidden_suit=forbidden_suit)
+    remaining_counts = list(hand.remaining_counts_without_visible())
+    remaining_counts[tile_id] = max(0, remaining_counts[tile_id] - 1)
+    shanten = calculate_best_shanten(after)
+    standard_shanten = calculate_standard_shanten(after)
+    seven_pairs_shanten = calculate_seven_pairs_shanten(after)
+    effective = calculate_effective_tiles(
+        after,
+        remaining_counts=tuple(remaining_counts),
+        forbidden_suit=forbidden_suit,
+    )
     structure_score = evaluate_structure(after)
-    score = -100 * shanten + effective.remaining_total + structure_score
-    reasons = _build_reasons(hand, tile_id, shanten, effective, structure_score, missing_active)
+    discard_value = evaluate_discard_value(hand, tile_id)
+    score = -1000 * shanten + 10 * effective.remaining_total + structure_score - discard_value
+    reasons = _build_reasons(
+        hand,
+        tile_id,
+        shanten,
+        standard_shanten,
+        seven_pairs_shanten,
+        effective,
+        structure_score,
+        discard_value,
+        missing_active,
+    )
     return DiscardCandidate(
         tile_id=tile_id,
         score=score,
         shanten=shanten,
+        standard_shanten=standard_shanten,
+        seven_pairs_shanten=seven_pairs_shanten,
         effective=effective,
         structure_score=structure_score,
+        discard_value=discard_value,
         reasons=tuple(reasons),
     )
 
@@ -82,8 +112,11 @@ def _build_reasons(
     hand: Hand,
     tile_id: int,
     shanten: int,
+    standard_shanten: int,
+    seven_pairs_shanten: int,
     effective: EffectiveTiles,
     structure_score: int,
+    discard_value: int,
     missing_active: bool,
 ) -> list[str]:
     tile = Tile.from_id(tile_id)
@@ -102,10 +135,54 @@ def _build_reasons(
     if hand.count(tile_id) >= 2:
         reasons.append(f"{tile.label} 是对子的一部分，打出会降低对子价值")
 
-    reasons.append(f"打出后向听数为 {shanten}")
+    if seven_pairs_shanten < standard_shanten:
+        reasons.append(f"打出后七对路线更近，综合向听数为 {shanten}")
+    elif standard_shanten < seven_pairs_shanten:
+        reasons.append(f"打出后平胡路线更近，综合向听数为 {shanten}")
+    else:
+        reasons.append(f"打出后平胡和七对路线同为 {shanten} 向听")
     reasons.append(f"有效进张剩余 {effective.remaining_total} 张")
     reasons.append(f"保留结构评分为 {structure_score}")
+    reasons.append(f"打出牌自身价值为 {discard_value}，越低越适合打")
     return reasons
+
+
+def evaluate_discard_value(hand: Hand, tile_id: int) -> int:
+    counts = hand.counts
+    tile = Tile.from_id(tile_id)
+    value = 0
+
+    if counts[tile_id] >= 3:
+        value += 42
+    elif counts[tile_id] == 2:
+        value += 24
+
+    rank_index = tile.rank - 1
+    suit_start = tile_id // 9 * 9
+
+    if _has_neighbor(counts, suit_start, rank_index, 1):
+        value += 16 if 1 <= rank_index <= 6 else 8
+    if _has_neighbor(counts, suit_start, rank_index, -1):
+        value += 16 if 2 <= rank_index <= 7 else 8
+    if _has_neighbor(counts, suit_start, rank_index, 2):
+        value += 9
+    if _has_neighbor(counts, suit_start, rank_index, -2):
+        value += 9
+
+    if 2 <= tile.rank <= 8:
+        value += 4
+    else:
+        value += 1
+
+    if _is_isolated(hand, tile_id):
+        value -= 10 if tile.rank in {1, 9} else 6
+
+    return max(0, value)
+
+
+def _has_neighbor(counts: tuple[int, ...], suit_start: int, rank_index: int, delta: int) -> bool:
+    other = rank_index + delta
+    return 0 <= other < 9 and counts[suit_start + other] > 0
 
 
 def _is_isolated(hand: Hand, tile_id: int) -> bool:

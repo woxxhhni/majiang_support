@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from majiang_support.core.hand import Hand, all_suited_tile_ids
-from majiang_support.core.shanten import calculate_standard_shanten
+from majiang_support.core.shanten import calculate_best_shanten
 from majiang_support.core.tile import tile_label
 
 
@@ -22,7 +22,7 @@ def calculate_effective_tiles(
     remaining_counts: tuple[int, ...] | None = None,
     forbidden_suit: str | None = None,
 ) -> EffectiveTiles:
-    base_shanten = calculate_standard_shanten(hand)
+    base_shanten = calculate_best_shanten(hand)
     remaining = remaining_counts or hand.remaining_counts_without_visible()
     useful: list[int] = []
     total = 0
@@ -33,7 +33,7 @@ def calculate_effective_tiles(
         if remaining[tile_id] <= 0 or hand.count(tile_id) >= 4:
             continue
         next_hand = hand.add(tile_id)
-        if calculate_standard_shanten(next_hand) < base_shanten:
+        if calculate_best_shanten(next_hand) < base_shanten:
             useful.append(tile_id)
             total += remaining[tile_id]
 

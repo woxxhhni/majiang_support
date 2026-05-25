@@ -26,6 +26,22 @@ def calculate_standard_shanten(hand: Hand) -> int:
     return best
 
 
+def calculate_seven_pairs_shanten(hand: Hand) -> int:
+    """Return seven-pairs shanten.
+
+    A complete seven-pairs hand returns -1. A ready 13-tile hand returns 0.
+    """
+
+    pairs = sum(1 for count in hand.counts if count >= 2)
+    unique_tiles = sum(1 for count in hand.counts if count > 0)
+    missing_unique = max(0, 7 - unique_tiles)
+    return 6 - pairs + missing_unique
+
+
+def calculate_best_shanten(hand: Hand) -> int:
+    return min(calculate_standard_shanten(hand), calculate_seven_pairs_shanten(hand))
+
+
 def _shanten_from_blocks(melds: int, taatsu: int, has_pair: bool) -> int:
     if melds + taatsu > 4:
         taatsu = 4 - melds
@@ -93,4 +109,3 @@ def _best_blocks(counts: tuple[int, ...]) -> tuple[int, int]:
     mutable[first] -= 1
     best = better(best, _best_blocks(tuple(mutable)))
     return best
-

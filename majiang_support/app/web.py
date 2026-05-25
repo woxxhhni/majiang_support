@@ -94,9 +94,12 @@ def _candidate_to_dict(candidate: Any) -> dict[str, Any]:
         "label": candidate.tile.label,
         "score": candidate.score,
         "shanten": candidate.shanten,
+        "standard_shanten": candidate.standard_shanten,
+        "seven_pairs_shanten": candidate.seven_pairs_shanten,
         "effective_count": candidate.effective.remaining_total,
         "effective_tiles": candidate.effective.labels,
         "structure_score": candidate.structure_score,
+        "discard_value": candidate.discard_value,
         "reasons": list(candidate.reasons),
     }
 
