@@ -23,6 +23,7 @@ let screenshotImage = null;
 let screenshotDataUrl = "";
 let screenshotHandTiles = [];
 let screenshotDiscardTiles = [];
+let lastResultText = "";
 
 function populateIncomingTileSelect() {
   populateTileSelect(document.querySelector("#incomingTile"));
@@ -76,6 +77,10 @@ function handText() {
   }
   const meldText = melds.map(formatMeldText).join("；");
   return `手牌：${freeText || "无"} | 固定面子：${meldText}${discardText}`;
+}
+
+function discardsText() {
+  return discards.map(tileLabel).join(" ");
 }
 
 function tileSortValue(tile) {
@@ -411,6 +416,50 @@ async function copyHandText() {
   }
 
   const text = handText();
+  await copyText(text);
+
+  stateText.textContent = "已复制手牌";
+  result.className = "result";
+  result.innerHTML = `
+    <div class="notice">已复制手牌文字：</div>
+    <div class="text-output">${escapeHtml(text)}</div>
+  `;
+  resultStamp.textContent = "已复制";
+}
+
+async function copyDiscardsText() {
+  if (discards.length === 0) {
+    result.className = "result";
+    result.innerHTML = `<div class="error">现在还没有已打出的牌可以复制。</div>`;
+    resultStamp.textContent = "未完成";
+    return;
+  }
+
+  const text = discardsText();
+  await copyText(text);
+  stateText.textContent = "已复制已打牌";
+  result.className = "result";
+  result.innerHTML = `
+    <div class="notice">已复制已打出的牌：</div>
+    <div class="text-output">${escapeHtml(text)}</div>
+  `;
+  resultStamp.textContent = "已复制";
+}
+
+async function copyResultText() {
+  if (!lastResultText) {
+    result.className = "result";
+    result.innerHTML = `<div class="error">现在还没有可复制的输出结果。</div>`;
+    resultStamp.textContent = "未完成";
+    return;
+  }
+
+  await copyText(lastResultText);
+  stateText.textContent = "已复制结果";
+  resultStamp.textContent = "已复制";
+}
+
+async function copyText(text) {
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(text);
@@ -420,14 +469,6 @@ async function copyHandText() {
   } catch (error) {
     fallbackCopyText(text);
   }
-
-  stateText.textContent = "已复制手牌";
-  result.className = "result";
-  result.innerHTML = `
-    <div class="notice">已复制手牌文字：</div>
-    <div class="text-output">${escapeHtml(text)}</div>
-  `;
-  resultStamp.textContent = "已复制";
 }
 
 function fallbackCopyText(text) {
@@ -447,6 +488,72 @@ function formatEffectiveTiles(labels) {
     return "无";
   }
   return labels.join("、");
+}
+
+function formatRecommendationText(payload) {
+  const best = payload.best;
+  const lines = [
+    `推荐打：${best.label}`,
+    `推荐路线：${best.best_route.label}`,
+    `综合分：${best.score}`,
+    `向听：${best.shanten}`,
+    `EV：${best.ev.toFixed(3)}`,
+    `有效进张：${best.effective_count}（${formatEffectiveTiles(best.effective_tiles)}）`,
+    "",
+    "理由：",
+    ...best.reasons.map((reason, index) => `${index + 1}. ${reason}`),
+    "",
+    "候选出牌：",
+    ...payload.candidates.map(
+      (candidate) =>
+        `${candidate.label}：分数 ${candidate.score}，向听 ${candidate.shanten}，进张 ${candidate.effective_count}，路线 ${candidate.best_route.label}，EV ${candidate.ev.toFixed(3)}`,
+    ),
+  ];
+  return lines.join("\n");
+}
+
+function formatDingQueText(payload) {
+  const lines = [
+    `推荐定缺：${payload.best.label}`,
+    `成本分：${payload.best.score}`,
+    "",
+    "理由：",
+    ...payload.best.reasons.map((reason, index) => `${index + 1}. ${reason}`),
+    "",
+    "候选定缺：",
+    ...payload.candidates.map(
+      (candidate) => `${candidate.label}：成本 ${candidate.score}，张数 ${candidate.tile_count}，结构 ${candidate.structure_value}`,
+    ),
+  ];
+  return lines.join("\n");
+}
+
+function formatActionText(payload) {
+  const best = payload.best;
+  const lines = [
+    `推荐动作：${best.label}`,
+    `动作收益差：${best.delta.toFixed(3)}`,
+    `动作前 EV：${best.ev_before.toFixed(3)}`,
+    `动作后 EV：${best.ev_after.toFixed(3)}`,
+    `路线：${best.route.label}`,
+  ];
+
+  if (best.discard) {
+    lines.push(`后续推荐打：${best.discard.best.label}`);
+  }
+
+  lines.push(
+    "",
+    "理由：",
+    ...best.reasons.map((reason, index) => `${index + 1}. ${reason}`),
+    "",
+    "候选动作：",
+    ...payload.candidates.map(
+      (candidate) =>
+        `${candidate.label}：收益差 ${candidate.delta.toFixed(3)}，动作前 ${candidate.ev_before.toFixed(3)}，动作后 ${candidate.ev_after.toFixed(3)}，路线 ${candidate.route.label}`,
+    ),
+  );
+  return lines.join("\n");
 }
 
 function insertDraggedTile(payload, targetIndex = hand.length) {
@@ -523,6 +630,10 @@ discardEl.addEventListener("drop", (event) => {
 document.querySelector("#sortHand").addEventListener("click", sortHand);
 
 document.querySelector("#copyHand").addEventListener("click", copyHandText);
+
+document.querySelector("#copyDiscards").addEventListener("click", copyDiscardsText);
+
+document.querySelector("#copyResult").addEventListener("click", copyResultText);
 
 document.querySelector("#addPong").addEventListener("click", () => addMeld("pong"));
 
@@ -656,6 +767,7 @@ document.querySelector("#actionScene").addEventListener("change", updateActionSc
 
 function showResult(payload) {
   resultStamp.textContent = "已输出";
+  lastResultText = formatRecommendationText(payload);
   const notice = payload.missing_suit_active
     ? `<div class="notice">定缺还没打完，候选牌已限制在缺门内。</div>`
     : "";
@@ -730,6 +842,7 @@ function showResult(payload) {
 
 function showDingQueResult(payload) {
   resultStamp.textContent = "已推荐定缺";
+  lastResultText = formatDingQueText(payload);
   const candidates = payload.candidates
     .map(
       (candidate) => `
@@ -764,6 +877,7 @@ function showDingQueResult(payload) {
 
 function showActionResult(payload) {
   resultStamp.textContent = "已分析动作";
+  lastResultText = formatActionText(payload);
   const candidates = payload.candidates
     .map(
       (candidate) => `
