@@ -97,3 +97,14 @@ def test_visible_discards_do_not_inflate_route_ev():
     for candidate in with_visible.candidates:
         base_candidate = next(item for item in base.candidates if item.tile_id == candidate.tile_id)
         assert candidate.ev <= base_candidate.ev
+
+
+def test_tenpai_tiles_are_reported_after_discard():
+    hand = Hand.parse("1m 2m 3m 7m 8m 9m 2p 3p 4p 5s 6s 7s 9s 1s")
+
+    recommendation = recommend_discard(hand, None)
+    discard_1s = next(candidate for candidate in recommendation.candidates if str(candidate.tile) == "1s")
+
+    assert discard_1s.shanten == 0
+    assert discard_1s.tenpai.remaining_total == 3
+    assert discard_1s.tenpai.labels == ["9条"]

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from majiang_support.core.effective import EffectiveTiles
-from majiang_support.core.hand import Hand
+from majiang_support.core.hand import Hand, all_suited_tile_ids
 from majiang_support.core.meld import Meld
 from majiang_support.core.remaining import remaining_counts_after_discard
 from majiang_support.core.shanten import (
@@ -11,6 +11,7 @@ from majiang_support.core.shanten import (
     calculate_standard_shanten,
 )
 from majiang_support.core.tile import Tile
+from majiang_support.core.win import can_win
 from majiang_support.strategy.ev import RouteEvaluation, evaluate_routes
 from majiang_support.strategy.structure import evaluate_structure
 
@@ -27,6 +28,7 @@ class DiscardCandidate:
     discard_value: int
     best_route: RouteEvaluation
     routes: tuple[RouteEvaluation, ...]
+    tenpai: EffectiveTiles
     ev: float
     reasons: tuple[str, ...]
 
@@ -98,6 +100,7 @@ def _score_discard(
     standard_shanten = calculate_standard_shanten(after, open_meld_count=len(open_melds))
     seven_pairs_shanten = calculate_seven_pairs_shanten(after, open_meld_count=len(open_melds))
     effective = best_route.effective
+    tenpai = _winning_tiles(after, remaining_counts, forbidden_suit, open_melds) if shanten == 0 else EffectiveTiles((), 0)
     structure_score = evaluate_structure(after)
     discard_value = evaluate_discard_value(hand, tile_id)
     score = -1000 * shanten + 10 * effective.remaining_total + structure_score - discard_value + int(best_route.ev * 1000)
@@ -108,6 +111,7 @@ def _score_discard(
         standard_shanten,
         seven_pairs_shanten,
         effective,
+        tenpai,
         structure_score,
         discard_value,
         best_route,
@@ -124,6 +128,7 @@ def _score_discard(
         discard_value=discard_value,
         best_route=best_route,
         routes=routes,
+        tenpai=tenpai,
         ev=best_route.ev,
         reasons=tuple(reasons),
     )
@@ -136,6 +141,7 @@ def _build_reasons(
     standard_shanten: int,
     seven_pairs_shanten: int,
     effective: EffectiveTiles,
+    tenpai: EffectiveTiles,
     structure_score: int,
     discard_value: int,
     best_route: RouteEvaluation,
@@ -166,9 +172,31 @@ def _build_reasons(
     else:
         reasons.append(f"打出后 {best_route.label} 路线价值最高，路线向听数为 {shanten}")
     reasons.append(f"有效进张剩余 {effective.remaining_total} 张")
+    if tenpai.remaining_total > 0:
+        reasons.append(f"打出后已上听，听 {', '.join(tenpai.labels)}，剩余 {tenpai.remaining_total} 张")
     reasons.append(f"保留结构评分为 {structure_score}")
     reasons.append(f"打出牌自身价值为 {discard_value}，越低越适合打")
     return reasons
+
+
+def _winning_tiles(
+    hand_after_discard: Hand,
+    remaining_counts: tuple[int, ...],
+    missing_suit: str | None,
+    open_melds: tuple[Meld, ...],
+) -> EffectiveTiles:
+    winners: list[int] = []
+    total = 0
+    for tile_id in all_suited_tile_ids():
+        tile = Tile.from_id(tile_id)
+        if missing_suit and tile.suit == missing_suit:
+            continue
+        if remaining_counts[tile_id] <= 0 or hand_after_discard.count(tile_id) >= 4:
+            continue
+        if can_win(hand_after_discard.add(tile_id), missing_suit, open_melds):
+            winners.append(tile_id)
+            total += remaining_counts[tile_id]
+    return EffectiveTiles(tuple(winners), total)
 
 
 def evaluate_discard_value(hand: Hand, tile_id: int) -> int:

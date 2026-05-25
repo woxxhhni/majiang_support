@@ -202,6 +202,8 @@ def _candidate_to_dict(candidate: Any) -> dict[str, Any]:
         "seven_pairs_shanten": candidate.seven_pairs_shanten,
         "effective_count": candidate.effective.remaining_total,
         "effective_tiles": candidate.effective.labels,
+        "tenpai_count": candidate.tenpai.remaining_total,
+        "tenpai_tiles": candidate.tenpai.labels,
         "structure_score": candidate.structure_score,
         "discard_value": candidate.discard_value,
         "ev": round(candidate.ev, 6),

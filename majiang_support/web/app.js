@@ -504,6 +504,7 @@ function formatRecommendationText(payload) {
     `向听：${best.shanten}`,
     `EV：${best.ev.toFixed(3)}`,
     `有效进张：${best.effective_count}（${formatEffectiveTiles(best.effective_tiles)}）`,
+    best.tenpai_count > 0 ? `听牌：${best.tenpai_count} 张（${formatEffectiveTiles(best.tenpai_tiles)}）` : "",
     "",
     "理由：",
     ...best.reasons.map((reason, index) => `${index + 1}. ${reason}`),
@@ -511,10 +512,12 @@ function formatRecommendationText(payload) {
     "候选出牌：",
     ...payload.candidates.map(
       (candidate) =>
-        `${candidate.label}：分数 ${candidate.score}，向听 ${candidate.shanten}，进张 ${candidate.effective_count}，路线 ${candidate.best_route.label}，EV ${candidate.ev.toFixed(3)}`,
+        `${candidate.label}：分数 ${candidate.score}，向听 ${candidate.shanten}，进张 ${candidate.effective_count}，路线 ${candidate.best_route.label}，EV ${candidate.ev.toFixed(3)}${
+          candidate.tenpai_count > 0 ? `，听 ${formatEffectiveTiles(candidate.tenpai_tiles)}（${candidate.tenpai_count}张）` : ""
+        }`,
     ),
   ];
-  return lines.join("\n");
+  return lines.filter((line) => line !== "").join("\n");
 }
 
 function formatDingQueText(payload) {
@@ -836,6 +839,11 @@ function showResult(payload) {
             <span>EV ${candidate.ev.toFixed(3)}</span>
           </div>
           <div class="effective-line">有效牌：${formatEffectiveTiles(candidate.effective_tiles)}</div>
+          ${
+            candidate.tenpai_count > 0
+              ? `<div class="notice">打出后上听：听 ${formatEffectiveTiles(candidate.tenpai_tiles)}，剩余 ${candidate.tenpai_count} 张</div>`
+              : ""
+          }
         </div>
       `,
     )
@@ -858,6 +866,11 @@ function showResult(payload) {
         <span>进张 ${payload.best.best_route.effective_count}</span>
       </div>
       <div class="effective-line">有效牌：${formatEffectiveTiles(payload.best.best_route.effective_tiles)}</div>
+      ${
+        payload.best.tenpai_count > 0
+          ? `<div class="notice">打出后上听：听 ${formatEffectiveTiles(payload.best.tenpai_tiles)}，剩余 ${payload.best.tenpai_count} 张</div>`
+          : ""
+      }
     </div>
     <ol class="reasons">
       ${payload.best.reasons.map((reason) => `<li>${reason}</li>`).join("")}
