@@ -242,10 +242,14 @@ function renderDiscards() {
 
   discards.forEach((tile, index) => {
     const button = createTile(tile);
+    button.dataset.index = String(index);
     button.title = "点击移除这张已打牌";
     button.addEventListener("click", () => {
       discards.splice(index, 1);
       render();
+    });
+    button.addEventListener("dragstart", (event) => {
+      event.dataTransfer.setData("text/plain", JSON.stringify({ source: "discard", index, tile }));
     });
     discardEl.append(button);
   });
@@ -354,11 +358,16 @@ function addMeld(kind) {
 
 function addDiscard() {
   const tile = document.querySelector("#discardTile").value;
+  addDiscardTile(tile);
+}
+
+function addDiscardTile(tile, targetIndex = discards.length) {
   if ((visibleTileCounts()[tile] || 0) >= 4) {
     stateText.textContent = `${tileLabel(tile)} 已经有 4 张`;
+    render();
     return;
   }
-  discards.push(tile);
+  discards.splice(targetIndex, 0, tile);
   result.className = "result empty";
   result.textContent = `已记录已打出的牌：${tileLabel(tile)}。后续进张和 EV 会扣掉这张牌。`;
   resultStamp.textContent = "已更新";
@@ -450,6 +459,20 @@ function insertDraggedTile(payload, targetIndex = hand.length) {
   render();
 }
 
+function insertDraggedDiscard(payload, targetIndex = discards.length) {
+  if (payload.source === "pool") {
+    addDiscardTile(payload.tile, targetIndex);
+    return;
+  }
+
+  if (payload.source === "discard") {
+    const [tile] = discards.splice(payload.index, 1);
+    const adjustedIndex = payload.index < targetIndex ? targetIndex - 1 : targetIndex;
+    discards.splice(Math.max(0, adjustedIndex), 0, tile);
+  }
+  render();
+}
+
 handEl.addEventListener("dragover", (event) => {
   event.preventDefault();
   handEl.classList.add("drag-over");
@@ -468,6 +491,26 @@ handEl.addEventListener("drop", (event) => {
   const target = event.target.closest(".tile");
   const targetIndex = target ? Number(target.dataset.index) : hand.length;
   insertDraggedTile(payload, targetIndex);
+});
+
+discardEl.addEventListener("dragover", (event) => {
+  event.preventDefault();
+  discardEl.classList.add("drag-over");
+});
+
+discardEl.addEventListener("dragleave", () => {
+  discardEl.classList.remove("drag-over");
+});
+
+discardEl.addEventListener("drop", (event) => {
+  event.preventDefault();
+  discardEl.classList.remove("drag-over");
+  const raw = event.dataTransfer.getData("text/plain");
+  if (!raw) return;
+  const payload = JSON.parse(raw);
+  const target = event.target.closest(".tile");
+  const targetIndex = target ? Number(target.dataset.index) : discards.length;
+  insertDraggedDiscard(payload, targetIndex);
 });
 
 document.querySelector("#sortHand").addEventListener("click", sortHand);

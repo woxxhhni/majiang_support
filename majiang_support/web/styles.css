@@ -227,10 +227,19 @@ select:hover {
 }
 
 .discard-list {
+  min-height: 72px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+  padding: 12px;
+  border: 1px dashed #a8b9ae;
+  background: #f9fbf9;
+}
+
+.discard-list.drag-over {
+  border-color: var(--green);
+  background: #edf8f1;
 }
 
 .discard-list .tile {
