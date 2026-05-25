@@ -318,8 +318,8 @@ function sortHand() {
   render();
 }
 
-function addMeld(kind) {
-  const tile = document.querySelector("#meldTile").value;
+function addMeld(kind, tileOverride = null) {
+  const tile = tileOverride || document.querySelector("#meldTile").value;
 
   if (kind === "open_kong") {
     const pongIndex = melds.findIndex((meld) => meld.tile === tile && meld.kind === "pong");
@@ -587,6 +587,28 @@ function insertDraggedDiscard(payload, targetIndex = discards.length) {
   render();
 }
 
+function wireMeldDropTarget(selector, kind) {
+  const element = document.querySelector(selector);
+  element.classList.add("drop-target");
+  element.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    element.classList.add("drag-over");
+  });
+  element.addEventListener("dragleave", () => {
+    element.classList.remove("drag-over");
+  });
+  element.addEventListener("drop", (event) => {
+    event.preventDefault();
+    element.classList.remove("drag-over");
+    const raw = event.dataTransfer.getData("text/plain");
+    if (!raw) return;
+    const payload = JSON.parse(raw);
+    if (!payload.tile) return;
+    document.querySelector("#meldTile").value = payload.tile;
+    addMeld(kind, payload.tile);
+  });
+}
+
 handEl.addEventListener("dragover", (event) => {
   event.preventDefault();
   handEl.classList.add("drag-over");
@@ -638,6 +660,10 @@ document.querySelector("#copyResult").addEventListener("click", copyResultText);
 document.querySelector("#addPong").addEventListener("click", () => addMeld("pong"));
 
 document.querySelector("#addOpenKong").addEventListener("click", () => addMeld("open_kong"));
+
+wireMeldDropTarget("#addPong", "pong");
+
+wireMeldDropTarget("#addOpenKong", "open_kong");
 
 document.querySelector("#clearMelds").addEventListener("click", () => {
   melds.splice(0, melds.length);

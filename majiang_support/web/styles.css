@@ -149,6 +149,11 @@ select:hover {
   border-color: var(--green-dark);
 }
 
+.drop-target.drag-over {
+  border-color: var(--green);
+  background: #edf8f1;
+}
+
 .hand-zone,
 .meld-zone,
 .discard-zone,
