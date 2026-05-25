@@ -147,6 +147,34 @@ handEl.addEventListener("drop", (event) => {
 
 document.querySelector("#sortHand").addEventListener("click", sortHand);
 
+document.querySelector("#suggestMissing").addEventListener("click", async () => {
+  if (hand.length === 0) {
+    result.className = "result";
+    result.innerHTML = `<div class="error">先输入手牌，再推荐定缺。</div>`;
+    resultStamp.textContent = "未完成";
+    return;
+  }
+
+  result.className = "result";
+  result.innerHTML = "正在推荐定缺...";
+
+  const response = await fetch("/api/recommend-dingque", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ hand }),
+  });
+  const payload = await response.json();
+
+  if (!response.ok) {
+    result.innerHTML = `<div class="error">${payload.error || "推荐定缺失败"}</div>`;
+    resultStamp.textContent = "失败";
+    return;
+  }
+
+  document.querySelector("#missingSuit").value = payload.best.suit;
+  showDingQueResult(payload);
+});
+
 document.querySelector("#clearHand").addEventListener("click", () => {
   hand.splice(0, hand.length);
   result.className = "result empty";
@@ -223,5 +251,38 @@ function showResult(payload) {
   `;
 }
 
-render();
+function showDingQueResult(payload) {
+  resultStamp.textContent = "已推荐定缺";
+  const candidates = payload.candidates
+    .map(
+      (candidate) => `
+        <div class="candidate">
+          <div class="candidate-head">
+            <span>缺${candidate.label}</span>
+            <span>${candidate.score}</span>
+          </div>
+          <div class="metrics">
+            <span>张数 ${candidate.tile_count}</span>
+            <span>结构 ${candidate.structure_value}</span>
+            <span>成本越低越好</span>
+          </div>
+        </div>
+      `,
+    )
+    .join("");
 
+  result.innerHTML = `
+    <div class="best">
+      推荐定缺
+      <strong>${payload.best.label}</strong>
+    </div>
+    <ol class="reasons">
+      ${payload.best.reasons.map((reason) => `<li>${reason}</li>`).join("")}
+    </ol>
+    <div class="candidate-list">
+      ${candidates}
+    </div>
+  `;
+}
+
+render();

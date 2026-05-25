@@ -10,6 +10,7 @@ from urllib.parse import unquote
 
 from majiang_support.core.hand import Hand
 from majiang_support.core.tile import parse_suit
+from majiang_support.strategy.dingque import recommend_dingque
 from majiang_support.strategy.discard import recommend_discard
 
 
@@ -26,14 +27,17 @@ class MahjongWebHandler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self) -> None:
-        if self.path != "/api/recommend":
-            self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+        if self.path == "/api/recommend":
+            self._handle_recommend()
             return
+        if self.path == "/api/recommend-dingque":
+            self._handle_recommend_dingque()
+            return
+        self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
+    def _handle_recommend(self) -> None:
         try:
-            content_length = int(self.headers.get("Content-Length", "0"))
-            raw_body = self.rfile.read(content_length).decode("utf-8")
-            payload = json.loads(raw_body)
+            payload = self._read_json_body()
             hand_text = " ".join(str(tile) for tile in payload.get("hand", []))
             missing_suit = parse_suit(payload.get("missing"))
             hand = Hand.parse(hand_text)
@@ -42,11 +46,20 @@ class MahjongWebHandler(SimpleHTTPRequestHandler):
         except Exception as exc:
             self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
 
-    def translate_path(self, path: str) -> str:
-        path = unquote(path.split("?", 1)[0].split("#", 1)[0])
-        if path == "/":
-            path = "/index.html"
-        return str(STATIC_DIR / path.lstrip("/"))
+    def _handle_recommend_dingque(self) -> None:
+        try:
+            payload = self._read_json_body()
+            hand_text = " ".join(str(tile) for tile in payload.get("hand", []))
+            hand = Hand.parse(hand_text)
+            recommendation = recommend_dingque(hand)
+            self._send_json(_dingque_to_dict(recommendation))
+        except Exception as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
+    def _read_json_body(self) -> dict[str, Any]:
+        content_length = int(self.headers.get("Content-Length", "0"))
+        raw_body = self.rfile.read(content_length).decode("utf-8")
+        return json.loads(raw_body)
 
     def _send_json(self, payload: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -55,6 +68,16 @@ class MahjongWebHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self.end_headers()
+
+    def translate_path(self, path: str) -> str:
+        path = unquote(path.split("?", 1)[0].split("#", 1)[0])
+        if path == "/":
+            path = "/index.html"
+        return str(STATIC_DIR / path.lstrip("/"))
 
 
 def _recommendation_to_dict(recommendation: Any) -> dict[str, Any]:
@@ -78,6 +101,24 @@ def _candidate_to_dict(candidate: Any) -> dict[str, Any]:
     }
 
 
+def _dingque_to_dict(recommendation: Any) -> dict[str, Any]:
+    return {
+        "best": _dingque_candidate_to_dict(recommendation.best),
+        "candidates": [_dingque_candidate_to_dict(candidate) for candidate in recommendation.candidates],
+    }
+
+
+def _dingque_candidate_to_dict(candidate: Any) -> dict[str, Any]:
+    return {
+        "suit": candidate.suit,
+        "label": candidate.label,
+        "score": candidate.score,
+        "tile_count": candidate.tile_count,
+        "structure_value": candidate.structure_value,
+        "reasons": list(candidate.reasons),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="majiang-web")
     parser.add_argument("--host", default="127.0.0.1")
@@ -91,4 +132,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
