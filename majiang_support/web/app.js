@@ -521,6 +521,33 @@ function extractHandTiles(image) {
   const context = canvas.getContext("2d");
   context.drawImage(image, 0, 0);
 
+  const width = canvas.width;
+  const height = canvas.height;
+  const regionX = Math.round(width * 0.015);
+  const regionY = Math.round(height * 0.795);
+  const regionW = Math.round(width * 0.870);
+  const regionH = Math.round(height * 0.200);
+  const region = cropCanvas(canvas, regionX, regionY, regionW, regionH);
+  const components = findWhiteTileComponents(region, regionX, regionY, {
+    minPixels: 1400,
+    minWidth: Math.round(width * 0.035),
+    minHeight: Math.round(height * 0.095),
+    maxWidth: Math.round(width * 0.085),
+    maxHeight: Math.round(height * 0.190),
+    pad: 3,
+    merge: true,
+  });
+
+  if (components.length >= 10) {
+    return components
+      .sort((left, right) => left.x - right.x)
+      .slice(0, 14);
+  }
+
+  return extractHandTilesByGrid(canvas);
+}
+
+function extractHandTilesByGrid(canvas) {
   const captures = [];
   const width = canvas.width;
   const height = canvas.height;
@@ -534,7 +561,7 @@ function extractHandTiles(image) {
     const x = startX + index * step;
     const crop = cropCanvas(canvas, x, startY, tileW, tileH);
     if (brightRatio(crop) > 0.26) {
-      captures.push({ url: crop.toDataURL("image/png") });
+      captures.push({ url: crop.toDataURL("image/png"), x, y: startY });
     }
   }
   return captures;
@@ -584,7 +611,13 @@ function brightRatio(canvas) {
   return bright / (data.length / 4);
 }
 
-function findWhiteTileComponents(regionCanvas, offsetX, offsetY) {
+function findWhiteTileComponents(regionCanvas, offsetX, offsetY, options = {}) {
+  const minPixels = options.minPixels ?? 500;
+  const minWidth = options.minWidth ?? 34;
+  const minHeight = options.minHeight ?? 34;
+  const maxWidth = options.maxWidth ?? 150;
+  const maxHeight = options.maxHeight ?? 160;
+  const pad = options.pad ?? 8;
   const context = regionCanvas.getContext("2d");
   const imageData = context.getImageData(0, 0, regionCanvas.width, regionCanvas.height);
   const data = imageData.data;
@@ -634,8 +667,7 @@ function findWhiteTileComponents(regionCanvas, offsetX, offsetY) {
 
       const boxW = maxX - minX + 1;
       const boxH = maxY - minY + 1;
-      if (pixels > 500 && boxW >= 34 && boxH >= 34 && boxW <= 150 && boxH <= 160) {
-        const pad = 8;
+      if (pixels > minPixels && boxW >= minWidth && boxH >= minHeight && boxW <= maxWidth && boxH <= maxHeight) {
         const crop = cropCanvas(
           regionCanvas,
           Math.max(0, minX - pad),
@@ -647,11 +679,29 @@ function findWhiteTileComponents(regionCanvas, offsetX, offsetY) {
           url: crop.toDataURL("image/png"),
           x: offsetX + minX,
           y: offsetY + minY,
+          width: boxW,
+          height: boxH,
         });
       }
     }
   }
-  return captures.sort((left, right) => left.y - right.y || left.x - right.x);
+  const sorted = captures.sort((left, right) => left.y - right.y || left.x - right.x);
+  return options.merge ? mergeNearbyCaptures(sorted) : sorted;
+}
+
+function mergeNearbyCaptures(captures) {
+  const merged = [];
+  for (const capture of captures) {
+    const previous = merged[merged.length - 1];
+    if (previous && Math.abs(capture.x - previous.x) < Math.max(capture.width, previous.width) * 0.45) {
+      if (capture.width * capture.height > previous.width * previous.height) {
+        merged[merged.length - 1] = capture;
+      }
+    } else {
+      merged.push(capture);
+    }
+  }
+  return merged;
 }
 
 render();
