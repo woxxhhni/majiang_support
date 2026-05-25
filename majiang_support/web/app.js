@@ -528,23 +528,122 @@ function extractHandTiles(image) {
   const regionW = Math.round(width * 0.870);
   const regionH = Math.round(height * 0.200);
   const region = cropCanvas(canvas, regionX, regionY, regionW, regionH);
-  const components = findWhiteTileComponents(region, regionX, regionY, {
-    minPixels: 1400,
-    minWidth: Math.round(width * 0.035),
-    minHeight: Math.round(height * 0.095),
-    maxWidth: Math.round(width * 0.085),
-    maxHeight: Math.round(height * 0.190),
-    pad: 3,
-    merge: true,
-  });
-
-  if (components.length >= 10) {
-    return components
-      .sort((left, right) => left.x - right.x)
-      .slice(0, 14);
+  const projected = extractHandTilesByProjection(region, regionX, regionY);
+  if (projected.length >= 10 && projected.length <= 14) {
+    return projected;
   }
 
   return extractHandTilesByGrid(canvas);
+}
+
+function extractHandTilesByProjection(regionCanvas, offsetX, offsetY) {
+  const context = regionCanvas.getContext("2d");
+  const { width, height } = regionCanvas;
+  const data = context.getImageData(0, 0, width, height).data;
+  const columnScores = new Array(width).fill(0);
+  const rowScores = new Array(height).fill(0);
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      if (isHandTilePixel(data[offset], data[offset + 1], data[offset + 2])) {
+        columnScores[x] += 1;
+        rowScores[y] += 1;
+      }
+    }
+  }
+
+  const xRange = activeRange(smoothScores(columnScores, 7), height * 0.12);
+  const yRange = activeRange(smoothScores(rowScores, 7), width * 0.10);
+  if (!xRange || !yRange) return [];
+
+  const handWidth = xRange.end - xRange.start + 1;
+  const estimatedCount = Math.max(1, Math.min(14, Math.round(handWidth / (width * 0.069))));
+  const tileStep = handWidth / estimatedCount;
+  const captures = [];
+
+  for (let index = 0; index < estimatedCount; index += 1) {
+    const slotStart = Math.round(xRange.start + index * tileStep);
+    const slotEnd = Math.round(index === estimatedCount - 1 ? xRange.end : xRange.start + (index + 1) * tileStep);
+    const local = refineTileBox(regionCanvas, slotStart, slotEnd, yRange.start, yRange.end);
+    if (!local) continue;
+    const padX = 2;
+    const padY = 3;
+    const x = Math.max(0, local.x1 - padX);
+    const y = Math.max(0, local.y1 - padY);
+    const w = Math.min(width - x, local.x2 - local.x1 + 1 + padX * 2);
+    const h = Math.min(height - y, local.y2 - local.y1 + 1 + padY * 2);
+    const crop = cropCanvas(regionCanvas, x, y, w, h);
+    if (brightRatio(crop) > 0.24) {
+      captures.push({
+        url: crop.toDataURL("image/png"),
+        x: offsetX + x,
+        y: offsetY + y,
+        width: w,
+        height: h,
+      });
+    }
+  }
+
+  return captures;
+}
+
+function isHandTilePixel(red, green, blue) {
+  return red > 168 && green > 168 && blue > 158 && Math.max(red, green, blue) - Math.min(red, green, blue) < 72;
+}
+
+function smoothScores(scores, radius) {
+  return scores.map((_, index) => {
+    let total = 0;
+    let count = 0;
+    for (let delta = -radius; delta <= radius; delta += 1) {
+      const at = index + delta;
+      if (at >= 0 && at < scores.length) {
+        total += scores[at];
+        count += 1;
+      }
+    }
+    return total / count;
+  });
+}
+
+function activeRange(scores, threshold) {
+  let start = -1;
+  let end = -1;
+  for (let index = 0; index < scores.length; index += 1) {
+    if (scores[index] >= threshold) {
+      if (start < 0) start = index;
+      end = index;
+    }
+  }
+  if (start < 0 || end <= start) return null;
+  return { start, end };
+}
+
+function refineTileBox(regionCanvas, x1, x2, y1, y2) {
+  const context = regionCanvas.getContext("2d");
+  const data = context.getImageData(0, 0, regionCanvas.width, regionCanvas.height).data;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let pixels = 0;
+
+  for (let y = y1; y <= y2; y += 1) {
+    for (let x = x1; x <= x2; x += 1) {
+      const offset = (y * regionCanvas.width + x) * 4;
+      if (isHandTilePixel(data[offset], data[offset + 1], data[offset + 2])) {
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+        pixels += 1;
+      }
+    }
+  }
+
+  if (pixels < 600 || !Number.isFinite(minX)) return null;
+  return { x1: minX, x2: maxX, y1: minY, y2: maxY };
 }
 
 function extractHandTilesByGrid(canvas) {
