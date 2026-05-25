@@ -34,6 +34,11 @@ function populateIncomingTileSelect() {
   }
 }
 
+function updateActionSceneFields() {
+  const scene = document.querySelector("#actionScene").value;
+  document.querySelector("#incomingTileField").classList.toggle("hidden", scene !== "after_discard");
+}
+
 function tileLabel(tile) {
   return `${tile[0]}${suits.find((suit) => suit.id === tile[1]).label}`;
 }
@@ -319,6 +324,8 @@ document.querySelector("#analyzeAction").addEventListener("click", async () => {
 
   showActionResult(payload);
 });
+
+document.querySelector("#actionScene").addEventListener("change", updateActionSceneFields);
 
 function showResult(payload) {
   resultStamp.textContent = "已输出";
@@ -1047,4 +1054,5 @@ function dedupeCaptures(captures) {
 }
 
 populateIncomingTileSelect();
+updateActionSceneFields();
 render();
