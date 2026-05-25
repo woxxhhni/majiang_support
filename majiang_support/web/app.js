@@ -525,15 +525,57 @@ function extractHandTiles(image) {
   const height = canvas.height;
   const regionX = Math.round(width * 0.015);
   const regionY = Math.round(height * 0.795);
-  const regionW = Math.round(width * 0.870);
+  const regionW = Math.round(width * 0.940);
   const regionH = Math.round(height * 0.200);
   const region = cropCanvas(canvas, regionX, regionY, regionW, regionH);
-  const projected = extractHandTilesByProjection(region, regionX, regionY);
-  if (projected.length >= 10 && projected.length <= 14) {
-    return projected;
+  const rowSplit = extractHandTilesByRows(region, regionX, regionY, width, height);
+  if (rowSplit.length >= 2 && rowSplit.length <= 14) {
+    return rowSplit;
   }
 
   return extractHandTilesByGrid(canvas);
+}
+
+function extractHandTilesByRows(regionCanvas, offsetX, offsetY, imageWidth, imageHeight) {
+  const expectedTileW = Math.round(imageWidth * 0.064);
+  const expectedTileH = Math.round(imageHeight * 0.160);
+  const components = findRawWhiteComponents(regionCanvas)
+    .filter((component) => {
+      const bottom = component.y + component.height;
+      return (
+        component.height >= expectedTileH * 0.72 &&
+        component.width >= expectedTileW * 0.55 &&
+        bottom >= regionCanvas.height * 0.72
+      );
+    })
+    .sort((left, right) => left.x - right.x);
+
+  const captures = [];
+  for (const component of components) {
+    const estimatedCount = Math.max(1, Math.min(14, Math.round(component.width / expectedTileW)));
+    const slotW = component.width / estimatedCount;
+    const bottomY = Math.min(regionCanvas.height - 1, component.y + component.height - 1);
+    const topY = Math.max(0, bottomY - expectedTileH + 1);
+
+    for (let index = 0; index < estimatedCount; index += 1) {
+      const x1 = Math.round(component.x + index * slotW);
+      const x2 = Math.round(index === estimatedCount - 1 ? component.x + component.width - 1 : component.x + (index + 1) * slotW - 1);
+      const local = refineTileBox(regionCanvas, x1, x2, topY, bottomY);
+      if (!local) continue;
+      const crop = cropTightTile(regionCanvas, local, 2, 3);
+      if (brightRatio(crop.canvas) > 0.22) {
+        captures.push({
+          url: crop.canvas.toDataURL("image/png"),
+          x: offsetX + crop.x,
+          y: offsetY + crop.y,
+          width: crop.width,
+          height: crop.height,
+        });
+      }
+    }
+  }
+
+  return captures.sort((left, right) => left.x - right.x).slice(0, 14);
 }
 
 function extractHandTilesByProjection(regionCanvas, offsetX, offsetY) {
@@ -567,20 +609,14 @@ function extractHandTilesByProjection(regionCanvas, offsetX, offsetY) {
     const slotEnd = Math.round(index === estimatedCount - 1 ? xRange.end : xRange.start + (index + 1) * tileStep);
     const local = refineTileBox(regionCanvas, slotStart, slotEnd, yRange.start, yRange.end);
     if (!local) continue;
-    const padX = 2;
-    const padY = 3;
-    const x = Math.max(0, local.x1 - padX);
-    const y = Math.max(0, local.y1 - padY);
-    const w = Math.min(width - x, local.x2 - local.x1 + 1 + padX * 2);
-    const h = Math.min(height - y, local.y2 - local.y1 + 1 + padY * 2);
-    const crop = cropCanvas(regionCanvas, x, y, w, h);
-    if (brightRatio(crop) > 0.24) {
+    const crop = cropTightTile(regionCanvas, local, 2, 3);
+    if (brightRatio(crop.canvas) > 0.24) {
       captures.push({
-        url: crop.toDataURL("image/png"),
-        x: offsetX + x,
-        y: offsetY + y,
-        width: w,
-        height: h,
+        url: crop.canvas.toDataURL("image/png"),
+        x: offsetX + crop.x,
+        y: offsetY + crop.y,
+        width: crop.width,
+        height: crop.height,
       });
     }
   }
@@ -589,7 +625,7 @@ function extractHandTilesByProjection(regionCanvas, offsetX, offsetY) {
 }
 
 function isHandTilePixel(red, green, blue) {
-  return red > 168 && green > 168 && blue > 158 && Math.max(red, green, blue) - Math.min(red, green, blue) < 72;
+  return red > 135 && green > 135 && blue > 125 && Math.max(red, green, blue) - Math.min(red, green, blue) < 95;
 }
 
 function smoothScores(scores, radius) {
@@ -644,6 +680,20 @@ function refineTileBox(regionCanvas, x1, x2, y1, y2) {
 
   if (pixels < 600 || !Number.isFinite(minX)) return null;
   return { x1: minX, x2: maxX, y1: minY, y2: maxY };
+}
+
+function cropTightTile(source, box, padX, padY) {
+  const x = Math.max(0, box.x1 - padX);
+  const y = Math.max(0, box.y1 - padY);
+  const width = Math.min(source.width - x, box.x2 - box.x1 + 1 + padX * 2);
+  const height = Math.min(source.height - y, box.y2 - box.y1 + 1 + padY * 2);
+  return {
+    canvas: cropCanvas(source, x, y, width, height),
+    x,
+    y,
+    width,
+    height,
+  };
 }
 
 function extractHandTilesByGrid(canvas) {
@@ -798,6 +848,69 @@ function findWhiteTileComponents(regionCanvas, offsetX, offsetY, options = {}) {
   }
   const sorted = captures.sort((left, right) => left.y - right.y || left.x - right.x);
   return options.merge ? mergeNearbyCaptures(sorted) : sorted;
+}
+
+function findRawWhiteComponents(regionCanvas) {
+  const context = regionCanvas.getContext("2d");
+  const imageData = context.getImageData(0, 0, regionCanvas.width, regionCanvas.height);
+  const data = imageData.data;
+  const width = regionCanvas.width;
+  const height = regionCanvas.height;
+  const visited = new Uint8Array(width * height);
+  const components = [];
+
+  function isTilePixel(index) {
+    const offset = index * 4;
+    return isHandTilePixel(data[offset], data[offset + 1], data[offset + 2]);
+  }
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const start = y * width + x;
+      if (visited[start] || !isTilePixel(start)) continue;
+      const queue = [start];
+      visited[start] = 1;
+      let minX = x;
+      let maxX = x;
+      let minY = y;
+      let maxY = y;
+      let pixels = 0;
+
+      while (queue.length) {
+        const current = queue.pop();
+        const cx = current % width;
+        const cy = Math.floor(current / width);
+        pixels += 1;
+        minX = Math.min(minX, cx);
+        maxX = Math.max(maxX, cx);
+        minY = Math.min(minY, cy);
+        maxY = Math.max(maxY, cy);
+
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = cx + dx;
+          const ny = cy + dy;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+          const next = ny * width + nx;
+          if (!visited[next] && isTilePixel(next)) {
+            visited[next] = 1;
+            queue.push(next);
+          }
+        }
+      }
+
+      if (pixels >= 900) {
+        components.push({
+          x: minX,
+          y: minY,
+          width: maxX - minX + 1,
+          height: maxY - minY + 1,
+          pixels,
+        });
+      }
+    }
+  }
+
+  return components;
 }
 
 function mergeNearbyCaptures(captures) {

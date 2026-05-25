@@ -17,7 +17,7 @@ class RegionDetection:
 
 def detect_screenshot_regions(data_url: str) -> dict[str, Any]:
     image = _decode_data_url(data_url)
-    hand_region = _crop_ratio(image, (0.015, 0.790, 0.875, 0.205))
+    hand_region = _crop_ratio(image, (0.015, 0.790, 0.940, 0.205))
     discard_region = _crop_ratio(image, (0.245, 0.125, 0.540, 0.610))
 
     hand_tiles = _detect_tiles(hand_region)
@@ -26,7 +26,7 @@ def detect_screenshot_regions(data_url: str) -> dict[str, Any]:
     return {
         "hand": {
             "tiles": hand_tiles,
-            "box": _ratio_box(image, (0.015, 0.790, 0.875, 0.205)),
+            "box": _ratio_box(image, (0.015, 0.790, 0.940, 0.205)),
         },
         "discards": {
             "tiles": discard_tiles,
@@ -78,4 +78,3 @@ def _ratio_box(image: Image.Image, ratio_box: tuple[float, float, float, float])
     x2 = round(image_width * (left + width))
     y2 = round(image_height * (top + height))
     return (x1, y1, x2, y2)
-
